@@ -1,17 +1,20 @@
 """
-NFL Prediction Engine — starter version
-=======================================
+NFL Prediction Engine
+=====================
 Free data (nflverse, refreshed daily on GitHub releases):
   * schedules/games.csv     results 1999-now, rest days, home/neutral site, div games,
                             roof, surface, temp, wind, Vegas spread/total/moneylines
   * stats_team_week_YYYY    weekly team box stats incl. passing/rushing EPA, sacks, turnovers
+  * stats_player_week_YYYY  weekly player stats: QB EPA, CPOE, sacks, turnovers
   * injuries_YYYY           official weekly injury reports (Out / Doubtful / Questionable)
+  * snap_counts_YYYY        snap share per player per game (2013+)
+  * depth_charts / weekly_rosters (current season)   who is QB1 and who is on the active roster
 
 Features (all computed only from info available BEFORE kickoff):
   Elo ratings (MOV-adjusted, season regression), exponentially weighted scoring form,
   offensive & defensive EPA/play, turnover/sack margins, rest days, bye / short week,
-  home field / neutral site, division game, dome / weather, position-weighted injuries,
-  QB-out flag.
+  home field / neutral site, division game, dome / weather, QB ratings of the expected starters
+  (see players.py), and injuries weighted by position x snap share.
 
 Models (stacked ensemble, each makes predictions, a meta-model blends them):
   Win probability: Logistic Regression, Random Forest, Extra Trees, Gradient Boosting,
@@ -21,10 +24,14 @@ Models (stacked ensemble, each makes predictions, a meta-model blends them):
 
 The model does NOT use the Vegas line as an input, so it can be compared against it.
 
-Usage:  python engine.py            (download data, backtest, predict rest of season)
-        python engine.py --no-download
+Usage:  python engine.py              weekly: download, backtest, train, save model, predict
+        python engine.py train        same, skipping the backtest
+        python engine.py score        daily: fresh injuries/rosters, re-predict with saved model
+        add --no-download to any of them to use the files already in data/
 """
-import argparse, os, sys, warnings, urllib.request
+import argparse, os, sys, subprocess, warnings, urllib.request
+from datetime import datetime, timezone
+import joblib
 import numpy as np, pandas as pd
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -37,45 +44,64 @@ from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score, log_loss, brier_score_loss, mean_absolute_error
+import players as P
 
 warnings.filterwarnings("ignore")
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 OUT = os.path.join(HERE, "output")
-SEASON, START_WEEK = 2026, 8
+MODEL = os.path.join(HERE, "models", "model.joblib")
+SEASON = 2026
 FIRST_TRAIN = 2012
+FIRST_SNAPS = 2013
 REL = "https://github.com/nflverse/nflverse-data/releases/download"
-TEAM_FIX = {"OAK": "LV", "SD": "LAC", "STL": "LA"}
+TEAM_FIX = P.TEAM_FIX
+PLAYER_COLS = {"player_id", "player_display_name", "position", "season", "week", "season_type", "game_id",
+               "team", "attempts", "sacks_suffered", "carries", "passing_epa", "rushing_epa", "passing_cpoe"}
 
 # ----------------------------------------------------------------------------- data
-def download(years):
+def download(years, daily=False):
+    """Weekly run fetches anything missing plus the current season; the daily run only the current season."""
     os.makedirs(DATA, exist_ok=True)
-    files = {"games.csv": f"{REL}/schedules/games.csv"}
+    files = {"games.csv": f"{REL}/schedules/games.csv", "players.csv": f"{REL}/players/players.csv",
+             f"roster_{SEASON}.csv": f"{REL}/weekly_rosters/roster_weekly_{SEASON}.csv",
+             f"depth_{SEASON}.csv": f"{REL}/depth_charts/depth_charts_{SEASON}.csv"}
     for y in years:
         files[f"team_{y}.csv"] = f"{REL}/stats_team/stats_team_week_{y}.csv"
         files[f"injuries_{y}.csv"] = f"{REL}/injuries/injuries_{y}.csv"
+        files[f"player_{y}.csv"] = f"{REL}/stats_player/stats_player_week_{y}.csv"
+        if y >= FIRST_SNAPS:
+            files[f"snaps_{y}.csv"] = f"{REL}/snap_counts/snap_counts_{y}.csv"
     for name, url in files.items():
         path = os.path.join(DATA, name)
-        current = str(SEASON) in name or name == "games.csv"
+        current = str(SEASON) in name or name in ("games.csv", "players.csv")
         if os.path.exists(path) and not current:
             continue
+        if daily and not current:
+            continue
         try:
-            urllib.request.urlretrieve(url, path)
+            urllib.request.urlretrieve(url, path + ".part")
+            os.replace(path + ".part", path)
         except Exception as e:
             print(f"  could not download {name}: {e}")
 
 def load(years):
-    g = pd.read_csv(os.path.join(DATA, "games.csv"), low_memory=False)
+    read = lambda name, **kw: pd.read_csv(os.path.join(DATA, name), low_memory=False, **kw)
+    many = lambda pat, **kw: pd.concat([read(pat.format(y), **kw) for y in years
+                                        if os.path.exists(os.path.join(DATA, pat.format(y)))], ignore_index=True)
+    g = read("games.csv")
     for c in ("home_team", "away_team"):
         g[c] = g[c].replace(TEAM_FIX)
     g = g[g.season >= 1999].copy()
-    teams, inj = [], []
-    for y in years:
-        p = os.path.join(DATA, f"team_{y}.csv")
-        if os.path.exists(p): teams.append(pd.read_csv(p, low_memory=False))
-        p = os.path.join(DATA, f"injuries_{y}.csv")
-        if os.path.exists(p): inj.append(pd.read_csv(p, low_memory=False))
-    return g, pd.concat(teams, ignore_index=True), pd.concat(inj, ignore_index=True)
+    return dict(games=g, team=many("team_{}.csv"), inj=many("injuries_{}.csv"),
+                player=many("player_{}.csv", usecols=lambda c: c in PLAYER_COLS),
+                snaps=many("snaps_{}.csv"), players=read("players.csv", usecols=["gsis_id", "pfr_id", "display_name"]),
+                roster=read(f"roster_{SEASON}.csv", usecols=["team", "week", "status", "gsis_id"]),
+                depth=read(f"depth_{SEASON}.csv", usecols=["dt", "team", "player_name", "gsis_id", "pos_abb", "pos_rank"]))
+
+def current_week(g):
+    left = g[(g.season == SEASON) & (g.game_type == "REG") & g.home_score.isna()]
+    return int(left.week.min()) if len(left) else 19
 
 # ----------------------------------------------------------------------------- Elo
 def elo_ratings(g, k=20, hfa=48, revert=1 / 3):
@@ -137,38 +163,50 @@ def team_form(g, ts, halflife=6):
     form["f_tomargin"] = form.f_takeaways - form.f_giveaways
     return form
 
-# ----------------------------------------------------------------------------- injuries
-POS_W = {"QB": 6.0, "T": 1.5, "G": 1.0, "C": 1.0, "WR": 1.2, "TE": 0.8, "RB": 0.8, "CB": 1.2,
-         "S": 0.8, "DE": 1.2, "DT": 0.9, "LB": 0.8, "OLB": 1.0, "ILB": 0.8, "MLB": 0.8, "NT": 0.8,
-         "FS": 0.8, "SS": 0.8, "DB": 0.8, "K": 0.3, "P": 0.1, "LS": 0.1, "FB": 0.3, "OL": 1.0, "DL": 1.0}
-STATUS_W = {"Out": 1.0, "Doubtful": 0.75, "Questionable": 0.25}
-
-def injury_load(inj):
-    inj = inj[inj.game_type.isin(["REG", "WC", "DIV", "CON", "SB"]) | inj.game_type.isna()].copy()
-    inj["team"] = inj.team.replace(TEAM_FIX)
-    inj["w"] = inj.position.map(POS_W).fillna(0.6) * inj.report_status.map(STATUS_W).fillna(0)
-    # Current week before the final (Friday) report: no game designations yet, so estimate
-    # from practice participation (DNP ~ likely out, Limited ~ questionable).
-    has_final = inj.groupby(["season", "week", "team"]).report_status.transform("count") > 0
-    prac = inj.practice_status.fillna("")
-    est = np.where(prac.str.startswith("Did Not"), 0.6, np.where(prac.str.startswith("Limited"), 0.2, 0.0))
-    inj.loc[~has_final, "w"] = inj.loc[~has_final, "position"].map(POS_W).fillna(0.6) * est[~has_final.values]
-    inj["qb_out"] = ((inj.position == "QB") & (inj.report_status.isin(["Out", "Doubtful"]) |
-                     (~has_final & prac.str.startswith("Did Not")))).astype(int)
-    agg = inj.groupby(["season", "week", "team"]).agg(inj_load=("w", "sum"), qb_out=("qb_out", "max")).reset_index()
-    return agg
-
 # ----------------------------------------------------------------------------- features
 FEATURES = ["elo_diff", "home_elo", "away_elo", "neutral", "rest_diff", "home_bye", "away_bye",
             "home_short", "away_short", "div_game", "dome", "temp", "wind", "grass", "primetime",
             "ptdiff_diff", "epadiff_diff", "off_vs_def_home", "off_vs_def_away", "tomargin_diff",
-            "sack_diff", "home_pf", "away_pf", "home_pa", "away_pa", "inj_diff", "home_qb_out",
-            "away_qb_out", "week"]
+            "sack_diff", "home_pf", "away_pf", "home_pa", "away_pa", "inj_diff",
+            "home_qb", "away_qb", "qb_diff", "qb_adj_diff", "week"]
 
-def build(g, ts, inj):
-    g = g.copy()
+def qb_features(df, d, week):
+    """Starter QB rating per side. Played games: the QB who actually started. Upcoming games:
+    depth-chart QB1, blended with his backup by P(out) from the injury report."""
+    q, ratings, rep = P.qb_ratings(P.qb_games(d["player"]))
+    starts = q[q.starter][["game_id", "season", "week", "team", "player_id", "player_display_name", "qb_rating"]]
+    starts, norm_now = P.team_qb_norm(starts)
+    names = dict(zip(d["players"].gsis_id, d["players"].display_name))
+    last = starts.sort_values(["season", "week"]).groupby("team").last()
+    last_starter = {t: (r.player_id, r.player_display_name) for t, r in last.iterrows()}
+    depth_qbs = P.depth_chart_qbs(d["depth"], d["roster"])
+    inj = P.out_probability(d["inj"][d["inj"].season == SEASON].assign(team=lambda x: x.team.replace(TEAM_FIX)))
+    inj_p = dict(zip(zip(inj.season, inj.week, inj.team, inj.gsis_id), inj.p_out))
+    unplayed = df.home_score.isna() & (df.season == SEASON)
+    for side in ("home", "away"):
+        s = starts.rename(columns={"team": f"{side}_team", "qb_rating": f"{side}_qb", "team_qb_norm": f"{side}_qb_norm",
+                                   "player_display_name": f"{side}_qb_name"})
+        df = df.merge(s[["game_id", f"{side}_team", f"{side}_qb", f"{side}_qb_norm", f"{side}_qb_name"]],
+                      on=["game_id", f"{side}_team"], how="left")
+        df[f"{side}_qb_out"] = 0
+        proj = [P.projected_qb(t, se, wk, depth_qbs, last_starter, ratings, rep, inj_p, names)
+                for t, se, wk in zip(df.loc[unplayed, f"{side}_team"], df.loc[unplayed, "season"], df.loc[unplayed, "week"])]
+        if proj:
+            df.loc[unplayed, f"{side}_qb"] = [p[0] for p in proj]
+            df.loc[unplayed, f"{side}_qb_name"] = [p[1] for p in proj]
+            df.loc[unplayed, f"{side}_qb_out"] = [int(p[2]) for p in proj]
+            df.loc[unplayed, f"{side}_qb_norm"] = df.loc[unplayed, f"{side}_team"].map(norm_now)
+        df[f"{side}_qb"] = df[f"{side}_qb"].fillna(rep)
+        df[f"{side}_qb_norm"] = df[f"{side}_qb_norm"].fillna(df[f"{side}_qb"])
+    df["qb_diff"] = df.home_qb - df.away_qb
+    # starter vs the team's usual QB: the FiveThirtyEight-style QB adjustment to Elo
+    df["qb_adj_diff"] = (df.home_qb - df.home_qb_norm) - (df.away_qb - df.away_qb_norm)
+    return df
+
+def build(d, week):
+    g = d["games"].copy()
     elo_df, final_elo = elo_ratings(g)
-    form = team_form(g, ts)
+    form = team_form(g, d["team"])
     df = g.merge(elo_df, on="game_id", how="left")
     # team form: for played games use game-specific row; for future games use latest form
     played_form = form[form.game_id.notna()]
@@ -187,16 +225,19 @@ def build(g, ts, inj):
     unplayed = df.home_score.isna()
     df.loc[unplayed, "home_elo"] = df.loc[unplayed, "home_team"].map(final_elo)
     df.loc[unplayed, "away_elo"] = df.loc[unplayed, "away_team"].map(final_elo)
-    # injuries: weekly report; future weeks without a report -> team's season-average load
-    il = injury_load(inj)
+    # injuries: weekly report weighted by snap share; future weeks without a report -> season-average load
+    il = P.injury_load(d["inj"], P.snap_shares(d["snaps"], d["players"]), FIRST_SNAPS)
+    avg = il.groupby(["season", "team"]).inj_load.mean()
+    reported = set(zip(d["inj"].season, d["inj"].week, d["inj"].team.replace(TEAM_FIX)))
     for side in ("home", "away"):
-        x = il.rename(columns={"team": f"{side}_team", "inj_load": f"{side}_inj", "qb_out": f"{side}_qb_out"})
+        x = il.rename(columns={"team": f"{side}_team", "inj_load": f"{side}_inj"})
         df = df.merge(x, on=["season", "week", f"{side}_team"], how="left")
-        avg = il.groupby(["season", "team"]).inj_load.mean()
+        has_report = pd.Series(list(zip(df.season, df.week, df[f"{side}_team"])), index=df.index).isin(reported)
+        df.loc[has_report, f"{side}_inj"] = df.loc[has_report, f"{side}_inj"].fillna(0)   # reported, nobody hurt
         miss = df[f"{side}_inj"].isna()
         key = list(zip(df.loc[miss, "season"], df.loc[miss, f"{side}_team"]))
         df.loc[miss, f"{side}_inj"] = [avg.get(k, il.inj_load.mean()) for k in key]
-        df[f"{side}_qb_out"] = df[f"{side}_qb_out"].fillna(0)
+    df = qb_features(df, d, week)
     # situational
     df["neutral"] = (df.location == "Neutral").astype(int)
     df["elo_diff"] = df.home_elo - df.away_elo + np.where(df.neutral == 1, 0, 48)
@@ -282,36 +323,47 @@ def evaluate(name, clf, reg_m, test):
         res[f"acc_{nm}"] = accuracy_score(y, est.predict_proba(t[FEATURES])[:, 1] > 0.5)
     return res
 
-# ----------------------------------------------------------------------------- main
-def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--no-download", action="store_true"); a = ap.parse_args()
+def prepare(no_download, daily):
     years = list(range(FIRST_TRAIN, SEASON + 1))
-    if not a.no_download:
-        print("Downloading data..."); download(years)
-    g, ts, inj = load(years)
-    df = build(g, ts, inj)
+    if not no_download:
+        print("Downloading data..."); download(years, daily=daily)
+    d = load(years)
+    week = current_week(d["games"])
+    df = build(d, week)
     df = df[df.season >= FIRST_TRAIN]
     played = df[df.margin.notna() & df[FEATURES].notna().all(axis=1)]
-    os.makedirs(OUT, exist_ok=True)
+    return df, played, week
 
+def backtest(played, week):
     print("Backtesting (train on prior seasons, test on later ones)...")
     results = []
     for test_name, tr, te in [("2024 season", played.season <= 2023, played.season == 2024),
                               ("2025 season", played.season <= 2024, played.season == 2025),
-                              (f"{SEASON} wks 1-{START_WEEK-1}", played.season <= SEASON - 1,
-                               (played.season == SEASON) & (played.week < START_WEEK))]:
+                              (f"{SEASON} wks 1-{week-1}", played.season <= SEASON - 1,
+                               (played.season == SEASON) & (played.week < week))]:
         clf, rm, _ = fit(played[tr])
         results.append(evaluate(test_name, clf, rm, played[te]))
         print(f"  {test_name}: acc {results[-1]['accuracy']:.3f} vs Vegas fav {results[-1]['vegas_fav_accuracy']:.3f}")
     pd.DataFrame(results).to_csv(os.path.join(OUT, "backtest.csv"), index=False)
 
+def train(played, week):
     print("Training final model on all games through last week...")
     clf, rm, rt = fit(played)
-    fut = df[(df.season == SEASON) & (df.week >= START_WEEK) & df.margin.isna() & (df.game_type == "REG")].copy()
-    fut[FEATURES] = fut[FEATURES].fillna(played[FEATURES].median())
-    fut["home_win_prob"] = clf.predict_proba(fut[FEATURES])[:, 1]
-    fut["pred_margin"] = rm.predict(fut[FEATURES])
-    fut["pred_total"] = rt.predict(fut[FEATURES])
+    os.makedirs(os.path.dirname(MODEL), exist_ok=True)
+    joblib.dump(dict(clf=clf, margin=rm, total=rt, features=FEATURES, medians=played[FEATURES].median(),
+                     trained_through=f"{SEASON} week {week - 1}",
+                     trained_at=datetime.now(timezone.utc).isoformat(timespec="minutes")), MODEL)
+    print(f"  saved {MODEL}")
+
+def score(df, week):
+    m = joblib.load(MODEL)
+    if m["features"] != FEATURES:
+        sys.exit("Saved model was trained on a different feature set; run `python engine.py train` first.")
+    fut = df[(df.season == SEASON) & (df.week >= week) & df.margin.isna() & (df.game_type == "REG")].copy()
+    fut[FEATURES] = fut[FEATURES].fillna(m["medians"])
+    fut["home_win_prob"] = m["clf"].predict_proba(fut[FEATURES])[:, 1]
+    fut["pred_margin"] = m["margin"].predict(fut[FEATURES])
+    fut["pred_total"] = m["total"].predict(fut[FEATURES])
     fut["pred_home_pts"] = (fut.pred_total + fut.pred_margin) / 2
     fut["pred_away_pts"] = (fut.pred_total - fut.pred_margin) / 2
     fut["pick"] = np.where(fut.home_win_prob >= 0.5, fut.home_team, fut.away_team)
@@ -321,7 +373,8 @@ def main():
     cols = ["season", "week", "gameday", "gametime", "away_team", "home_team", "pick", "confidence",
             "home_win_prob", "pred_away_pts", "pred_home_pts", "pred_margin", "pred_total",
             "vegas_home_spread", "edge_vs_vegas", "home_rest", "away_rest", "home_inj", "away_inj",
-            "home_qb_out", "away_qb_out", "home_elo", "away_elo"]
+            "home_qb_name", "away_qb_name", "home_qb", "away_qb", "home_qb_out", "away_qb_out",
+            "home_elo", "away_elo"]
     fut[cols].sort_values(["week", "gameday", "gametime"]).to_csv(os.path.join(OUT, "predictions.csv"), index=False)
 
     # projected final regular-season records = current wins + sum of win probabilities
@@ -338,7 +391,24 @@ def main():
         proj.append(dict(team=t, wins=w, losses=l, ties=ti, remaining=n, proj_wins=w + exp + ti * 0.5,
                          proj_losses=l + n - exp + ti * 0.5))
     pd.DataFrame(proj).sort_values("proj_wins", ascending=False).to_csv(os.path.join(OUT, "projected_standings.csv"), index=False)
+    pd.Series(dict(scored_at=datetime.now(timezone.utc).isoformat(timespec="minutes"), week=week,
+                   trained_through=m["trained_through"], trained_at=m["trained_at"])).to_json(os.path.join(OUT, "run.json"))
     print(f"Done. Wrote {len(fut)} game predictions to {OUT}/")
+
+# ----------------------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("mode", nargs="?", default="all", choices=["all", "train", "score"])
+    ap.add_argument("--no-download", action="store_true")
+    a = ap.parse_args()
+    os.makedirs(OUT, exist_ok=True)
+    df, played, week = prepare(a.no_download, daily=a.mode == "score")
+    if a.mode == "all":
+        backtest(played, week)
+    if a.mode in ("all", "train"):
+        train(played, week)
+    score(df, week)
+    subprocess.run([sys.executable, os.path.join(HERE, "build_page.py")], check=True)
 
 if __name__ == "__main__":
     main()

@@ -4,10 +4,11 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 p = pd.read_csv(f"{OUT}/predictions.csv")
 s = pd.read_csv(f"{OUT}/projected_standings.csv")
 b = pd.read_csv(f"{OUT}/backtest.csv")
+run = json.load(open(f"{OUT}/run.json")) if os.path.exists(f"{OUT}/run.json") else {}
 games = p.round(3).where(p.notna(), None).to_dict("records")
 stand = s.round(2).to_dict("records")
 back = b.round(4).to_dict("records")
-data = json.dumps({"games": games, "standings": stand, "backtest": back})
+data = json.dumps({"games": games, "standings": stand, "backtest": back, "run": run})
 
 html = r"""<title>Gridiron Engine 2026</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -70,9 +71,10 @@ ul.src{margin:0;padding-left:18px;display:grid;gap:4px;font-size:.88rem}
 </style>
 <div class="wrap">
   <header>
-    <div class="label">2026 regular season · weeks 8–18</div>
+    <div class="label">2026 regular season · weeks __WEEKS__</div>
     <h1>Gridiron Engine</h1>
     <p class="lede">Stacked machine-learning ensemble predictions for every remaining game. The model never sees the Vegas line, so the edge column shows where it disagrees with the market.</p>
+    <p class="note" id="updated"></p>
   </header>
   <nav class="weeks" id="weeks" aria-label="Week"></nav>
   <div class="games" id="games"></div>
@@ -93,12 +95,13 @@ ul.src{margin:0;padding-left:18px;display:grid;gap:4px;font-size:.88rem}
     <ul class="src">
       <li><b>Results, rest days, home/neutral site, division games, roof, surface, weather, Vegas lines:</b> nflverse schedules, 1999–2026</li>
       <li><b>Team scoring, EPA per play, turnovers, sacks:</b> nflverse weekly team stats, 2012–2026</li>
-      <li><b>Injuries:</b> official NFL injury reports, position-weighted (QB ×6); Week 8 uses practice reports until final designations post</li>
+      <li><b>Quarterbacks:</b> each QB rated on EPA per play and completion % over expected, weighted toward recent games and pulled toward replacement level on small samples. Upcoming games use the depth-chart starter, swapped for the backup by injury status; ratings follow players when they change teams</li>
+      <li><b>Injuries:</b> official NFL injury reports, each player weighted by position and his snap share with his current team; practice reports are used until final designations post</li>
       <li><b>Elo:</b> margin-of-victory adjusted ratings since 1999, regressed ⅓ each offseason</li>
       <li><b>Win model:</b> logistic regression, random forest, extra trees, gradient boosting, histogram GBM, neural net, SVM and k-NN, blended by a stacking meta-model</li>
       <li><b>Score model:</b> separate stacked regressors for margin and total points</li>
     </ul>
-    <p class="note">Weeks 9–18 use each team's current form, Elo and season-average injury load, so they will shift as games are played. Re-run the engine weekly.</p>
+    <p class="note">Later weeks use each team's current form, Elo, starting QB and season-average injury load, so they will shift as games are played. The model retrains weekly; injuries and depth charts refresh daily.</p>
   </section>
 </div>
 <script>
@@ -134,8 +137,8 @@ function renderGames(){
     if (vegas!=null){ const e = g.edge_vs_vegas; const side = e>=0?g.home_team:g.away_team;
       edge = Math.abs(e)<0.5 ? "In line" : `${side} ${sign(Math.abs(e))}`; edgeCls = Math.abs(e)>=3 ? "edge-pos" : ""; }
     const flags = [];
-    if (g.home_qb_out) flags.push(`${g.home_team} QB out`);
-    if (g.away_qb_out) flags.push(`${g.away_team} QB out`);
+    if (g.away_qb_out) flags.push(`${g.away_team} starting QB out`);
+    if (g.home_qb_out) flags.push(`${g.home_team} starting QB out`);
     if (g.home_rest>=13) flags.push(`${g.home_team} off bye`);
     if (g.away_rest>=13) flags.push(`${g.away_team} off bye`);
     if (g.home_rest<=5||g.away_rest<=5) flags.push("Short week");
@@ -144,6 +147,7 @@ function renderGames(){
       <div class="when">${dateText(g)}</div></div>
       <div class="row"><span><b>${g.pick}</b> to win · <span class="num">${Math.round(g.confidence*100)}%</span></span>
         <span class="num">${g.away_team} ${fmt(g.pred_away_pts,0)} – ${fmt(g.pred_home_pts,0)} ${g.home_team}</span></div>
+      ${g.away_qb_name||g.home_qb_name?`<div class="row when"><span>QBs: ${g.away_qb_name||"?"} vs ${g.home_qb_name||"?"}</span></div>`:""}
       <div class="bar" aria-label="${g.away_team} ${Math.round(ap*100)}%, ${g.home_team} ${Math.round(hp*100)}%"><span style="${homeWin?`right:0;width:${hp*100}%`:`left:0;width:${ap*100}%`}"></span></div>
       <div class="stats">
         <div><span class="label">Model line</span><span class="v">${modelLine}</span></div>
@@ -169,8 +173,10 @@ const keys = Object.keys(D.backtest[0]).filter(k=>k.startsWith("acc_"));
 $("models").innerHTML = `<thead><tr><th>Win accuracy by model</th>${D.backtest.map(b=>`<th>${b.period}</th>`).join("")}</tr></thead><tbody>`+
   `<tr><td>Stacked ensemble</td>${D.backtest.map(b=>`<td>${pct(b.accuracy)}</td>`).join("")}</tr>`+
   keys.map(k=>`<tr><td>${names[k.slice(4)]||k}</td>${D.backtest.map(b=>`<td>${pct(b[k])}</td>`).join("")}</tr>`).join("")+"</tbody>";
+if (D.run && D.run.scored_at) $("updated").textContent = `Updated ${new Date(D.run.scored_at).toLocaleString("en-US",{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})} · model trained through ${D.run.trained_through}`;
 renderWeeks(); renderGames(); renderStand();
 </script>
 """
-open(f"{OUT}/picks.html", "w").write(html.replace("__DATA__", data))
+weeks = f"{p.week.min()}–{p.week.max()}" if p.week.nunique() > 1 else str(p.week.min())
+open(f"{OUT}/picks.html", "w").write(html.replace("__DATA__", data).replace("__WEEKS__", weeks))
 print("wrote picks.html")
