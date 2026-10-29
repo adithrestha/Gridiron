@@ -12,9 +12,10 @@ Free data (nflverse, refreshed daily on GitHub releases):
 
 Features (all computed only from info available BEFORE kickoff):
   Elo ratings (MOV-adjusted, season regression), exponentially weighted scoring form,
-  offensive & defensive EPA/play, turnover/sack margins, rest days, bye / short week,
-  home field / neutral site, division game, dome / weather, QB ratings of the expected starters
-  (see players.py), and injuries weighted by position x snap share.
+  offensive & defensive EPA/play (raw and opponent-adjusted, split pass / run), turnover/sack
+  margins, rest days, bye / short week, home field / neutral site, division game, dome / weather,
+  travel miles, time zones crossed and body-clock kickoff time (see context.py), QB ratings of the
+  expected starters (see players.py), and injuries weighted by position x snap share.
 
 Models (stacked ensemble, each makes predictions, a meta-model blends them):
   Win probability: Logistic Regression, Random Forest, Extra Trees, Gradient Boosting,
@@ -44,8 +45,10 @@ from sklearn.ensemble import (RandomForestClassifier, ExtraTreesClassifier, Grad
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
+from scipy.stats import norm
 from sklearn.metrics import accuracy_score, log_loss, brier_score_loss, mean_absolute_error
 import players as P
+import context as C
 
 warnings.filterwarnings("ignore")
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -134,27 +137,43 @@ def elo_ratings(g, k=20, hfa=48, revert=1 / 3):
 
 # ----------------------------------------------------------------------------- team form
 def team_form(g, ts, halflife=6):
-    """Exponentially weighted form per team entering each game (carries across seasons)."""
+    """Exponentially weighted form per team entering each game (carries across seasons).
+    Also opponent-adjusted EPA: each game's EPA is corrected for how good the opponent's unit was
+    going into that game, overall and split into pass (per dropback) and run (per carry)."""
     played = g[g.home_score.notna()]
     rows = []
     for side, opp in (("home", "away"), ("away", "home")):
-        d = played[["game_id", "season", "week", "gameday", f"{side}_team", f"{side}_score", f"{opp}_score"]]
-        d.columns = ["game_id", "season", "week", "gameday", "team", "pf", "pa"]
+        d = played[["game_id", "season", "week", "gameday", f"{side}_team", f"{opp}_team", f"{side}_score", f"{opp}_score"]]
+        d.columns = ["game_id", "season", "week", "gameday", "team", "opp", "pf", "pa"]
         rows.append(d)
     tg = pd.concat(rows)
     ts = ts.copy()
+    ts["team"], ts["opponent_team"] = ts.team.replace(TEAM_FIX), ts.opponent_team.replace(TEAM_FIX)
     ts["plays"] = ts.attempts + ts.carries + ts.sacks_suffered
     ts["off_epa"] = (ts.passing_epa.fillna(0) + ts.rushing_epa.fillna(0)) / ts.plays.clip(lower=1)
+    ts["pass_off"] = ts.passing_epa.fillna(0) / (ts.attempts + ts.sacks_suffered).clip(lower=1)
+    ts["rush_off"] = ts.rushing_epa.fillna(0) / ts.carries.clip(lower=1)
     ts["giveaways"] = ts.passing_interceptions + ts.rushing_fumbles_lost + ts.sack_fumbles_lost
     ts["pass_rate"] = ts.attempts / ts.plays.clip(lower=1)
-    opp = ts[["game_id", "team", "off_epa", "giveaways", "sacks_suffered"]].rename(
-        columns={"team": "opponent_team", "off_epa": "def_epa", "giveaways": "takeaways",
-                 "sacks_suffered": "def_sacks_made"})
+    opp = ts[["game_id", "team", "off_epa", "pass_off", "rush_off", "giveaways", "sacks_suffered"]].rename(
+        columns={"team": "opponent_team", "off_epa": "def_epa", "pass_off": "pass_def", "rush_off": "rush_def",
+                 "giveaways": "takeaways", "sacks_suffered": "def_sacks_made"})
     ts = ts.merge(opp, on=["game_id", "opponent_team"], how="left")
-    tg = tg.merge(ts[["game_id", "team", "off_epa", "def_epa", "giveaways", "takeaways",
-                      "sacks_suffered", "def_sacks_made", "pass_rate"]], on=["game_id", "team"], how="left")
+    units = ["off_epa", "def_epa", "pass_off", "pass_def", "rush_off", "rush_def"]
+    tg = tg.merge(ts[["game_id", "team", "giveaways", "takeaways", "sacks_suffered", "def_sacks_made", "pass_rate"] + units],
+                  on=["game_id", "team"], how="left")
     tg = tg.sort_values(["team", "gameday"])
-    stats = ["pf", "pa", "off_epa", "def_epa", "giveaways", "takeaways", "sacks_suffered", "def_sacks_made", "pass_rate"]
+    # opponent adjustment: subtract how far the opposing unit's pre-game form sits from league average
+    pre = tg.groupby("team")[units].transform(lambda x: x.ewm(halflife=halflife, min_periods=1).mean().shift(1))
+    pre[["game_id", "team"]] = tg[["game_id", "team"]]
+    tg = tg.merge(pre.add_prefix("opp_pre_").rename(columns={"opp_pre_game_id": "game_id", "opp_pre_team": "opp"}),
+                  on=["game_id", "opp"], how="left").sort_values(["team", "gameday"])
+    league = tg.sort_values("gameday")[units].ewm(halflife=400).mean().shift(1).reindex(tg.index)   # prior games only
+    for mine, theirs in (("off_epa", "def_epa"), ("pass_off", "pass_def"), ("rush_off", "rush_def")):
+        for a, b in ((mine, theirs), (theirs, mine)):
+            tg[f"adj_{a}"] = tg[a] - (tg[f"opp_pre_{b}"] - league[b]).fillna(0)
+    stats = ["pf", "pa", "giveaways", "takeaways", "sacks_suffered", "def_sacks_made", "pass_rate"] + units + \
+            [f"adj_{u}" for u in units]
     out = []
     for team, d in tg.groupby("team"):
         ew = d[stats].ewm(halflife=halflife, min_periods=1).mean()
@@ -166,15 +185,19 @@ def team_form(g, ts, halflife=6):
     form = pd.concat(out, ignore_index=True)
     form["f_ptdiff"] = form.f_pf - form.f_pa
     form["f_epadiff"] = form.f_off_epa - form.f_def_epa
+    form["f_adj_epadiff"] = form.f_adj_off_epa - form.f_adj_def_epa
     form["f_tomargin"] = form.f_takeaways - form.f_giveaways
     return form
 
 # ----------------------------------------------------------------------------- features
-FEATURES = ["elo_diff", "home_elo", "away_elo", "neutral", "rest_diff", "home_bye", "away_bye",
+BASE_FEATURES = ["elo_diff", "home_elo", "away_elo", "neutral", "rest_diff", "home_bye", "away_bye",
             "home_short", "away_short", "div_game", "dome", "temp", "wind", "grass", "primetime",
             "ptdiff_diff", "epadiff_diff", "off_vs_def_home", "off_vs_def_away", "tomargin_diff",
             "sack_diff", "home_pf", "away_pf", "home_pa", "away_pa", "inj_diff",
             "home_qb", "away_qb", "qb_diff", "qb_adj_diff", "week"]
+ADJ_FEATURES = ["adj_epadiff_diff", "pass_mu_home", "pass_mu_away", "rush_mu_home", "rush_mu_away"]  # opponent-adjusted EPA
+TRAVEL_FEATURES = ["away_miles", "home_miles", "away_tz_shift", "home_tz_shift", "away_body_hour", "home_body_hour"]
+FEATURES = BASE_FEATURES + ADJ_FEATURES + TRAVEL_FEATURES
 
 def qb_features(df, d, week):
     """Starter QB rating per side. Played games: the QB who actually started. Upcoming games:
@@ -244,6 +267,8 @@ def build(d, week):
         key = list(zip(df.loc[miss, "season"], df.loc[miss, f"{side}_team"]))
         df.loc[miss, f"{side}_inj"] = [avg.get(k, il.inj_load.mean()) for k in key]
     df = qb_features(df, d, week)
+    # travel and body clock
+    df = C.travel(df)
     # situational
     df["neutral"] = (df.location == "Neutral").astype(int)
     df["elo_diff"] = df.home_elo - df.away_elo + np.where(df.neutral == 1, 0, 48)
@@ -262,6 +287,11 @@ def build(d, week):
     df["off_vs_def_home"] = df.home_f_off_epa + df.away_f_def_epa
     df["off_vs_def_away"] = df.away_f_off_epa + df.home_f_def_epa
     df["tomargin_diff"] = df.home_f_tomargin - df.away_f_tomargin
+    df["adj_epadiff_diff"] = df.home_f_adj_epadiff - df.away_f_adj_epadiff
+    df["pass_mu_home"] = df.home_f_adj_pass_off + df.away_f_adj_pass_def      # home passing vs away pass defense
+    df["pass_mu_away"] = df.away_f_adj_pass_off + df.home_f_adj_pass_def
+    df["rush_mu_home"] = df.home_f_adj_rush_off + df.away_f_adj_rush_def
+    df["rush_mu_away"] = df.away_f_adj_rush_off + df.home_f_adj_rush_def
     df["sack_diff"] = (df.home_f_def_sacks_made - df.home_f_sacks_suffered) - (df.away_f_def_sacks_made - df.away_f_sacks_suffered)
     df["home_pf"], df["away_pf"], df["home_pa"], df["away_pa"] = df.home_f_pf, df.away_f_pf, df.home_f_pa, df.away_f_pa
     df["inj_diff"] = df.home_inj - df.away_inj
@@ -310,17 +340,24 @@ def fit(train):
     clf.fit(win[FEATURES], (win.margin > 0).astype(int))
     reg_m, reg_t = regressors(), regressors()
     reg_m.fit(X, train.margin); reg_t.fit(X, train.points)
-    return clf, reg_m, reg_t
+    sigma = float(np.std(train.margin - reg_m.predict(X)))
+    return clf, reg_m, reg_t, sigma
 
-def evaluate(name, clf, reg_m, test):
+def win_and_margin(clf, reg_m, sigma, X):
+    """One consistent answer from the two models: average the win model's probability with the
+    probability implied by the predicted margin, then restate that probability as a margin.
+    The pick, win % and projected score then always agree (backtests slightly better than either alone)."""
+    p = (clf.predict_proba(X)[:, 1] + norm.cdf(reg_m.predict(X) / sigma)) / 2
+    return p, sigma * norm.ppf(p)
+
+def evaluate(name, clf, reg_m, sigma, test):
     t = test[test.margin != 0]
-    p = clf.predict_proba(t[FEATURES])[:, 1]
+    p, m = win_and_margin(clf, reg_m, sigma, t[FEATURES])
     y = (t.margin > 0).astype(int)
     vegas = t.spread_line.notna()
-    m = reg_m.predict(t[FEATURES])
-    ats = t[vegas & (t.margin != t.spread_line)]
-    ats_pick = reg_m.predict(ats[FEATURES]) > ats.spread_line
-    ats_hit = (ats_pick == (ats.margin > ats.spread_line)).mean()
+    ok = (vegas & (t.margin != t.spread_line)).values
+    ats = t[ok]
+    ats_hit = ((m[ok] > ats.spread_line) == (ats.margin > ats.spread_line)).mean()
     res = dict(period=name, games=len(t), accuracy=accuracy_score(y, p > 0.5), log_loss=log_loss(y, p),
                brier=brier_score_loss(y, p), vegas_fav_accuracy=((t[vegas].spread_line > 0) == (t[vegas].margin > 0)).mean(),
                margin_mae=mean_absolute_error(t.margin, m), ats_accuracy=ats_hit)
@@ -347,16 +384,16 @@ def backtest(played, week):
                               ("2025 season", played.season <= 2024, played.season == 2025),
                               (f"{SEASON} wks 1-{week-1}", played.season <= SEASON - 1,
                                (played.season == SEASON) & (played.week < week))]:
-        clf, rm, _ = fit(played[tr])
-        results.append(evaluate(test_name, clf, rm, played[te]))
+        clf, rm, _, sigma = fit(played[tr])
+        results.append(evaluate(test_name, clf, rm, sigma, played[te]))
         print(f"  {test_name}: acc {results[-1]['accuracy']:.3f} vs Vegas fav {results[-1]['vegas_fav_accuracy']:.3f}")
     pd.DataFrame(results).to_csv(os.path.join(OUT, "backtest.csv"), index=False)
 
 def train(played, week):
     print("Training final model on all games through last week...")
-    clf, rm, rt = fit(played)
+    clf, rm, rt, sigma = fit(played)
     os.makedirs(os.path.dirname(MODEL), exist_ok=True)
-    joblib.dump(dict(clf=clf, margin=rm, total=rt, features=FEATURES, medians=played[FEATURES].median(),
+    joblib.dump(dict(clf=clf, margin=rm, total=rt, sigma=sigma, features=FEATURES, medians=played[FEATURES].median(),
                      trained_through=f"{SEASON} week {week - 1}",
                      trained_at=datetime.now(timezone.utc).isoformat(timespec="minutes")), MODEL)
     print(f"  saved {MODEL}")
@@ -367,8 +404,7 @@ def score(df, week):
         sys.exit("Saved model was trained on a different feature set; run `python engine.py train` first.")
     fut = df[(df.season == SEASON) & (df.week >= week) & df.margin.isna() & (df.game_type == "REG")].copy()
     fut[FEATURES] = fut[FEATURES].fillna(m["medians"])
-    fut["home_win_prob"] = m["clf"].predict_proba(fut[FEATURES])[:, 1]
-    fut["pred_margin"] = m["margin"].predict(fut[FEATURES])
+    fut["home_win_prob"], fut["pred_margin"] = win_and_margin(m["clf"], m["margin"], m["sigma"], fut[FEATURES])
     fut["pred_total"] = m["total"].predict(fut[FEATURES])
     fut["pred_home_pts"] = (fut.pred_total + fut.pred_margin) / 2
     fut["pred_away_pts"] = (fut.pred_total - fut.pred_margin) / 2
