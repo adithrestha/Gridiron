@@ -94,11 +94,12 @@ ul.src{margin:0;padding-left:18px;display:grid;gap:4px;font-size:.88rem}
     <h2>Data and models</h2>
     <ul class="src">
       <li><b>Results, rest days, home/neutral site, division games, roof, surface, weather, Vegas lines:</b> nflverse schedules, 1999–2026</li>
-      <li><b>Team scoring, EPA per play, turnovers, sacks:</b> nflverse weekly team stats, 2012–2026</li>
+      <li><b>Team scoring, EPA per play, turnovers, sacks:</b> nflverse weekly team stats, 2012–2026; EPA is also adjusted for opponent strength and split into passing and rushing matchups</li>
+      <li><b>Travel:</b> miles traveled, time zones crossed and what time kickoff feels like on each team's body clock</li>
       <li><b>Quarterbacks:</b> each QB rated on EPA per play and completion % over expected, weighted toward recent games and pulled toward replacement level on small samples. Upcoming games use the depth-chart starter, swapped for the backup by injury status; ratings follow players when they change teams</li>
       <li><b>Injuries:</b> official NFL injury reports, each player weighted by position and his snap share with his current team; practice reports are used until final designations post</li>
       <li><b>Elo:</b> margin-of-victory adjusted ratings since 1999, regressed ⅓ each offseason</li>
-      <li><b>Win model:</b> logistic regression, random forest, extra trees, gradient boosting, histogram GBM, neural net, SVM and k-NN, blended by a stacking meta-model</li>
+      <li><b>Win model:</b> logistic regression, random forest, extra trees, gradient boosting, histogram GBM, neural net, SVM and k-NN, blended by a stacking meta-model, then averaged with the score model so the pick, win % and projected score always agree</li>
       <li><b>Score model:</b> separate stacked regressors for margin and total points</li>
     </ul>
     <p class="note">Later weeks use each team's current form, Elo, starting QB and season-average injury load, so they will shift as games are played. The model retrains weekly; injuries and depth charts refresh daily.</p>
