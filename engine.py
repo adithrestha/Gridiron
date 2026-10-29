@@ -26,7 +26,8 @@ The model does NOT use the Vegas line as an input, so it can be compared against
 
 Usage:  python engine.py              weekly: download, backtest, train, save model, predict
         python engine.py train        same, skipping the backtest
-        python engine.py score        daily: fresh injuries/rosters, re-predict with saved model
+        python engine.py score        quick: fresh injuries/rosters, re-predict with saved model
+        python engine.py gameday      exit code 0 if a game is today or tomorrow (for scheduling)
         add --no-download to any of them to use the files already in data/
 """
 import argparse, os, sys, subprocess, warnings, urllib.request
@@ -96,6 +97,13 @@ def load(years):
                 snaps=many("snaps_{}.csv"), players=read("players.csv", usecols=["gsis_id", "pfr_id", "display_name"]),
                 roster=read(f"roster_{SEASON}.csv", usecols=["team", "week", "status", "gsis_id"]),
                 depth=read(f"depth_{SEASON}.csv", usecols=["dt", "team", "player_name", "gsis_id", "pos_abb", "pos_rank"]))
+
+def game_soon(g, days=1):
+    """True if a game is scheduled today or within `days` days (US Eastern dates, as nflverse uses)."""
+    from zoneinfo import ZoneInfo
+    today = pd.Timestamp(datetime.now(ZoneInfo("America/New_York")).date())
+    dates = pd.to_datetime(g.loc[g.season == SEASON, "gameday"])
+    return bool(((dates >= today) & (dates <= today + pd.Timedelta(days=days))).any())
 
 def current_week(g):
     left = g[(g.season == SEASON) & (g.game_type == "REG") & g.home_score.isna()]
@@ -396,9 +404,13 @@ def score(df, week):
 # ----------------------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", nargs="?", default="all", choices=["all", "train", "score"])
+    ap.add_argument("mode", nargs="?", default="all", choices=["all", "train", "score", "gameday"])
     ap.add_argument("--no-download", action="store_true")
     a = ap.parse_args()
+    if a.mode == "gameday":     # exit 0 if a game is today or tomorrow, else 1 (used by refresh.sh auto)
+        if not a.no_download:
+            download([])
+        sys.exit(0 if game_soon(pd.read_csv(os.path.join(DATA, "games.csv"), low_memory=False)) else 1)
     os.makedirs(OUT, exist_ok=True)
     df, played, week = prepare(a.no_download)
     if a.mode == "all":
