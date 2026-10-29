@@ -60,8 +60,8 @@ PLAYER_COLS = {"player_id", "player_display_name", "position", "season", "week",
                "team", "attempts", "sacks_suffered", "carries", "passing_epa", "rushing_epa", "passing_cpoe"}
 
 # ----------------------------------------------------------------------------- data
-def download(years, daily=False):
-    """Weekly run fetches anything missing plus the current season; the daily run only the current season."""
+def download(years):
+    """Fetches the current season (always) and any earlier season not already in data/."""
     os.makedirs(DATA, exist_ok=True)
     files = {"games.csv": f"{REL}/schedules/games.csv", "players.csv": f"{REL}/players/players.csv",
              f"roster_{SEASON}.csv": f"{REL}/weekly_rosters/roster_weekly_{SEASON}.csv",
@@ -76,8 +76,6 @@ def download(years, daily=False):
         path = os.path.join(DATA, name)
         current = str(SEASON) in name or name in ("games.csv", "players.csv")
         if os.path.exists(path) and not current:
-            continue
-        if daily and not current:
             continue
         try:
             urllib.request.urlretrieve(url, path + ".part")
@@ -323,10 +321,10 @@ def evaluate(name, clf, reg_m, test):
         res[f"acc_{nm}"] = accuracy_score(y, est.predict_proba(t[FEATURES])[:, 1] > 0.5)
     return res
 
-def prepare(no_download, daily):
+def prepare(no_download):
     years = list(range(FIRST_TRAIN, SEASON + 1))
     if not no_download:
-        print("Downloading data..."); download(years, daily=daily)
+        print("Downloading data..."); download(years)
     d = load(years)
     week = current_week(d["games"])
     df = build(d, week)
@@ -402,7 +400,7 @@ def main():
     ap.add_argument("--no-download", action="store_true")
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
-    df, played, week = prepare(a.no_download, daily=a.mode == "score")
+    df, played, week = prepare(a.no_download)
     if a.mode == "all":
         backtest(played, week)
     if a.mode in ("all", "train"):
