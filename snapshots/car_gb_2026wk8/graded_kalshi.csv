@@ -1,0 +1,265 @@
+kind,label,side,buy_at,p_model,mid,flagged,result,lean_right,pnl_per_contract,brier_model,brier_kalshi
+Winner,Green Bay wins,YES,0.64,0.7009,0.635,False,yes,True,0.34,0.08946081000000002,0.13322499999999998
+Winner,Carolina wins,NO,0.64,0.2991,0.365,False,no,True,0.34,0.08946080999999999,0.13322499999999998
+Spread,Green Bay wins by over 7.5 points,YES,0.36,0.4685,0.355,False,yes,True,0.62,0.28249224999999994,0.41602500000000003
+Spread,Green Bay wins by over 6.5 points,YES,0.42,0.4999,0.41,False,yes,True,0.56,0.25010001,0.3481000000000001
+Spread,Green Bay wins by over 5.5 points,YES,0.45,0.5313,0.445,False,yes,True,0.53,0.21967969,0.30802499999999994
+Spread,Green Bay wins by over 4.5 points,YES,0.47,0.5625,0.465,False,yes,True,0.51,0.19140625,0.2862249999999999
+Spread,Green Bay wins by over 3.5 points,YES,0.51,0.5933,0.505,False,yes,True,0.47,0.16540488999999997,0.245025
+Spread,Green Bay wins by over 2.5 points,YES,0.59,0.6235,0.585,False,yes,True,0.39,0.14175224999999997,0.17222500000000002
+Spread,Green Bay wins by over 20.5 points,YES,0.11,0.1351,0.1,False,no,False,-0.12,0.01825201,0.010000000000000002
+Spread,Green Bay wins by over 1.5 points,YES,0.62,0.653,0.61,False,yes,True,0.36,0.12040899999999999,0.1521
+Spread,Green Bay wins by over 17.5 points,YES,0.14,0.1931,0.135,False,no,False,-0.15,0.03728761,0.018225
+Spread,Green Bay wins by over 16.5 points,YES,0.17,0.2155,0.165,False,no,False,-0.18,0.046440249999999995,0.027225000000000003
+Spread,Green Bay wins by over 14.5 points,YES,0.18,0.2643,0.175,False,no,False,-0.2,0.06985448999999999,0.030624999999999996
+Spread,Green Bay wins by over 13.5 points,YES,0.23,0.2907,0.225,False,no,False,-0.25,0.08450649,0.050625
+Spread,Green Bay wins by over 10.5 points,YES,0.27,0.3763,0.265,False,no,False,-0.29,0.14160169000000003,0.07022500000000001
+Spread,Green Bay wins by over 9.5 points,YES,0.32,0.4065,0.315,False,no,False,-0.34,0.16524224999999998,0.09922500000000001
+Spread,Carolina wins by over 7.5 points,NO,0.86,0.1352,0.145,False,no,True,0.13,0.018279039999999996,0.021025
+Spread,Carolina wins by over 6.5 points,NO,0.83,0.1531,0.18,False,no,True,0.16,0.023439610000000003,0.0324
+Spread,Carolina wins by over 5.5 points,NO,0.79,0.1724,0.215,False,no,True,0.19,0.02972176,0.046224999999999995
+Spread,Carolina wins by over 4.5 points,NO,0.78,0.1933,0.225,False,no,True,0.2,0.03736489,0.050625
+Spread,Carolina wins by over 3.5 points,NO,0.75,0.2156,0.255,False,no,True,0.23,0.04648336000000001,0.065025
+Spread,Carolina wins by over 2.5 points,NO,0.69,0.2393,0.315,False,no,True,0.29,0.05726449000000001,0.09922500000000001
+Spread,Carolina wins by over 1.5 points,NO,0.67,0.2645,0.335,False,no,True,0.31,0.06996025,0.11222500000000002
+Spread,Carolina wins by over 14.5 points,NO,0.93,0.0491,0.075,False,no,True,0.06,0.0024108099999999998,0.005625
+Spread,Carolina wins by over 13.5 points,NO,0.92,0.0577,0.085,False,no,True,0.07,0.00332929,0.007225000000000001
+Spread,Carolina wins by over 10.5 points,NO,0.91,0.0904,0.1,False,no,True,0.08,0.00817216,0.010000000000000002
+Spread,Carolina wins by over 9.5 points,NO,0.88,0.1039,0.125,False,no,True,0.11,0.010795210000000001,0.015625
+Total,Total over 68.5,NO,0.93,0.0583,0.075,False,no,True,0.06,0.00339889,0.005625
+Total,Total over 65.5,NO,0.92,0.0888,0.09,False,no,True,0.07,0.00788544,0.0081
+Total,Total over 62.5,NO,0.88,0.1297,0.13,False,no,True,0.11,0.01682209,0.016900000000000002
+Total,Total over 59.5,NO,0.82,0.1822,0.185,False,no,True,0.16,0.03319684,0.034225
+Total,Total over 56.5,YES,0.24,0.2462,0.235,False,no,False,-0.26,0.06061444,0.055224999999999996
+Total,Total over 53.5,YES,0.31,0.3206,0.305,False,no,False,-0.33,0.10278435999999999,0.093025
+Total,Total over 50.5,YES,0.41,0.4031,0.4,False,no,False,-0.43,0.16248961,0.16000000000000003
+Total,Total over 49.5,YES,0.43,0.4318,0.425,False,no,False,-0.45,0.18645124000000002,0.18062499999999998
+Total,Total over 48.5,YES,0.45,0.4608,0.445,False,no,False,-0.47,0.21233664,0.198025
+Total,Total over 47.5,YES,0.48,0.4901,0.475,False,no,False,-0.5,0.24019801,0.225625
+Total,Total over 46.5,NO,0.48,0.5194,0.525,False,no,True,0.5,0.26977636,0.275625
+Total,Total over 45.5,YES,0.55,0.5486,0.545,False,yes,True,0.43,0.20376196000000002,0.20702499999999996
+Total,Total over 44.5,NO,0.42,0.5776,0.585,False,yes,False,-0.44,0.17842175999999998,0.17222500000000002
+Total,Total over 41.5,NO,0.34,0.6614,0.665,False,yes,False,-0.36,0.11464996000000001,0.11222499999999998
+Total,Total over 38.5,NO,0.25,0.7379,0.755,False,yes,False,-0.27,0.06869641,0.060024999999999995
+Total,Total over 35.5,NO,0.18,0.8044,0.825,False,yes,False,-0.2,0.03825936,0.030625000000000017
+Total,Total over 32.5,NO,0.12,0.8595,0.885,False,yes,False,-0.13,0.019740249999999987,0.013224999999999997
+Total,Total over 29.5,NO,0.09,0.903,0.92,False,yes,False,-0.1,0.009408999999999995,0.006399999999999993
+Total,Total over 26.5,NO,0.05,0.9357,0.955,False,yes,False,-0.06,0.004134490000000003,0.002025000000000004
+Team total,Green Bay over 7.5 points,YES,0.97,0.9801,0.965,False,yes,True,0.02,0.00039601000000000116,0.0012250000000000021
+Team total,Green Bay over 42.5 points,YES,0.06,0.0478,0.045,False,no,False,-0.07,0.0022848400000000002,0.002025
+Team total,Green Bay over 3.5 points,YES,0.99,0.9935,0.985,False,yes,True,0.0,4.224999999999935e-05,0.0002250000000000004
+Team total,Green Bay over 38.5 points,YES,0.1,0.1072,0.085,False,no,False,-0.11,0.011491840000000001,0.007225000000000001
+Team total,Green Bay over 35.5 points,YES,0.16,0.1782,0.15,False,no,False,-0.17,0.03175524,0.0225
+Team total,Green Bay over 31.5 points,YES,0.27,0.3096,0.265,False,no,False,-0.29,0.09585215999999999,0.07022500000000001
+Team total,Green Bay over 28.5 points,YES,0.39,0.4295,0.385,False,no,False,-0.41,0.18447025,0.148225
+Team total,Green Bay over 26.5 points,YES,0.49,0.514,0.48,False,yes,True,0.49,0.236196,0.27040000000000003
+Team total,Green Bay over 24.5 points,YES,0.55,0.5979,0.545,False,yes,True,0.43,0.16168441,0.20702499999999996
+Team total,Green Bay over 21.5 points,YES,0.69,0.7146,0.685,False,yes,True,0.29,0.08145316,0.09922499999999997
+Team total,Green Bay over 20.5 points,YES,0.72,0.7496,0.715,False,yes,True,0.26,0.06270015999999998,0.08122500000000002
+Team total,Green Bay over 17.5 points,YES,0.82,0.8395,0.815,False,yes,True,0.16,0.02576024999999999,0.03422500000000002
+Team total,Green Bay over 14.5 points,YES,0.9,0.9052,0.89,False,yes,True,0.09,0.00898704,0.012099999999999998
+Team total,Green Bay over 10.5 points,YES,0.96,0.9588,0.95,False,yes,True,0.03,0.0016974400000000012,0.0025000000000000044
+Team total,Carolina over 7.5 points,NO,0.06,0.9139,0.945,False,yes,False,-0.07,0.007413209999999992,0.0030250000000000055
+Team total,Carolina over 42.5 points,NO,0.99,0.0092,0.02,False,no,True,0.0,8.464e-05,0.0004
+Team total,Carolina over 3.5 points,NO,0.04,0.9633,0.965,False,yes,False,-0.05,0.0013468899999999966,0.0012250000000000021
+Team total,Carolina over 38.5 points,NO,0.98,0.0266,0.04,False,no,True,0.01,0.00070756,0.0016
+Team total,Carolina over 35.5 points,NO,0.94,0.0533,0.07,False,no,True,0.05,0.00284089,0.004900000000000001
+Team total,Carolina over 31.5 points,NO,0.85,0.1174,0.155,False,no,True,0.14,0.013782760000000002,0.024025
+Team total,Carolina over 28.5 points,NO,0.78,0.1925,0.225,False,no,True,0.2,0.03705625,0.050625
+Team total,Carolina over 24.5 points,NO,0.64,0.3288,0.365,False,no,True,0.34,0.10810943999999999,0.13322499999999998
+Team total,Carolina over 21.5 points,NO,0.51,0.4506,0.495,False,no,True,0.47,0.20304036,0.245025
+Team total,Carolina over 20.5 points,NO,0.47,0.4929,0.535,False,no,True,0.51,0.24295041,0.286225
+Team total,Carolina over 17.5 points,NO,0.34,0.6184,0.665,False,yes,False,-0.36,0.14561856000000004,0.11222499999999998
+Team total,Carolina over 14.5 points,NO,0.22,0.7325,0.785,False,yes,False,-0.24,0.07155624999999997,0.04622499999999999
+Team total,Carolina over 10.5 points,NO,0.13,0.8522,0.875,False,yes,False,-0.14,0.02184484000000001,0.015625
+Player prop,John Metchie III 2+ TDs,YES,0.01,0.0123,0.005,False,no,False,-0.02,0.00015129,2.5e-05
+Player prop,Tetairoa McMillan 3+ TDs,YES,0.01,0.006,0.005,False,no,False,-0.02,3.6e-05,2.5e-05
+Player prop,Chuba Hubbard 3+ TDs,NO,0.98,0.0191,0.025,False,no,True,0.01,0.00036480999999999997,0.0006250000000000001
+Player prop,Christian Watson 3+ TDs,YES,0.02,0.0187,0.015,False,no,False,-0.03,0.00034969000000000005,0.000225
+Player prop,Tucker Kraft 3+ TDs,YES,0.01,0.0113,0.005,False,no,False,-0.02,0.00012769,2.5e-05
+Player prop,Bryce Young 2+ TDs,NO,0.99,0.0053,0.015,False,no,True,0.0,2.809e-05,0.000225
+Player prop,Bryce Young 1+ TDs,NO,0.9,0.1015,0.105,False,no,True,0.09,0.01030225,0.011024999999999998
+Player prop,Tommy Tremble 2+ TDs,NO,0.99,0.0122,0.015,False,no,True,0.0,0.00014884000000000002,0.000225
+Player prop,Tommy Tremble 1+ TDs,NO,0.84,0.1521,0.165,False,no,True,0.15,0.023134410000000005,0.027225000000000003
+Player prop,John Metchie III 1+ TDs,YES,0.11,0.153,0.105,False,no,False,-0.12,0.023409,0.011024999999999998
+Player prop,Tetairoa McMillan 2+ TDs,NO,0.95,0.0514,0.055,False,no,True,0.04,0.00264196,0.003025
+Player prop,Tetairoa McMillan 1+ TDs,NO,0.68,0.303,0.325,False,no,True,0.3,0.091809,0.10562500000000001
+Player prop,Chuba Hubbard 2+ TDs,NO,0.87,0.108,0.135,False,no,True,0.12,0.011663999999999999,0.018225
+Player prop,Chuba Hubbard 1+ TDs,NO,0.51,0.4271,0.495,False,yes,False,-0.53,0.32821440999999996,0.255025
+Player prop,Christian Watson 2+ TDs,YES,0.09,0.1067,0.085,False,no,False,-0.1,0.01138489,0.007225000000000001
+Player prop,Christian Watson 1+ TDs,YES,0.41,0.4248,0.405,False,no,False,-0.43,0.18045504,0.16402500000000003
+Player prop,Jordan Love 2+ TDs,YES,0.01,0.007,0.005,False,no,False,-0.02,4.9000000000000005e-05,2.5e-05
+Player prop,Jordan Love 1+ TDs,YES,0.1,0.1157,0.095,False,no,False,-0.11,0.01338649,0.009025
+Player prop,Tucker Kraft 2+ TDs,YES,0.06,0.0775,0.055,False,no,False,-0.07,0.00600625,0.003025
+Player prop,Tucker Kraft 1+ TDs,YES,0.34,0.3668,0.335,False,yes,True,0.64,0.40094224,0.44222500000000003
+Player prop,Matthew Golden 2+ TDs,YES,0.06,0.0729,0.055,False,no,False,-0.07,0.005314410000000001,0.003025
+Player prop,Matthew Golden 1+ TDs,YES,0.36,0.3566,0.355,False,yes,True,0.62,0.41396355999999995,0.41602500000000003
+Player prop,Bryce Young 4+ pass TDs,NO,0.94,0.0611,0.065,False,no,True,0.05,0.0037332100000000003,0.0042250000000000005
+Player prop,Bryce Young 3+ pass TDs,NO,0.81,0.1819,0.195,False,no,True,0.17,0.03308761,0.038025
+Player prop,Bryce Young 2+ pass TDs,NO,0.52,0.4297,0.485,False,no,True,0.46,0.18464209000000004,0.235225
+Player prop,Bryce Young 1+ pass TDs,NO,0.21,0.7685,0.805,False,yes,False,-0.23,0.053592250000000015,0.03802499999999998
+Player prop,Jordan Love 5+ pass TDs,YES,0.04,0.0504,0.03,False,no,False,-0.05,0.00254016,0.0009
+Player prop,Jordan Love 4+ pass TDs,YES,0.1,0.1384,0.095,False,no,False,-0.11,0.019154559999999998,0.009025
+Player prop,Jordan Love 3+ pass TDs,YES,0.28,0.3166,0.275,False,yes,True,0.7,0.46703556,0.525625
+Player prop,Jordan Love 2+ pass TDs,YES,0.59,0.5872,0.585,False,yes,True,0.39,0.17040383999999995,0.17222500000000002
+Player prop,Jordan Love 1+ pass TDs,YES,0.87,0.8612,0.86,False,yes,True,0.12,0.01926544000000001,0.019600000000000003
+Player prop,Bryce Young 350+ pass yds,NO,0.9,0.0601,0.105,False,no,True,0.09,0.00361201,0.011024999999999998
+Player prop,Bryce Young 325+ pass yds,NO,0.84,0.1076,0.165,False,no,True,0.15,0.01157776,0.027225000000000003
+Player prop,Bryce Young 300+ pass yds,NO,0.75,0.1899,0.26,False,no,True,0.23,0.036062010000000005,0.06760000000000001
+Player prop,Bryce Young 275+ pass yds,NO,0.62,0.2943,0.385,False,no,True,0.36,0.08661249,0.148225
+Player prop,Bryce Young 250+ pass yds,NO,0.49,0.4082,0.515,False,no,True,0.49,0.16662724,0.265225
+Player prop,Bryce Young 225+ pass yds,NO,0.33,0.538,0.675,False,no,True,0.65,0.28944400000000003,0.45562500000000006
+Player prop,Bryce Young 200+ pass yds,NO,0.22,0.6614,0.785,False,yes,False,-0.24,0.11464996000000001,0.04622499999999999
+Player prop,Bryce Young 175+ pass yds,NO,0.15,0.7627,0.855,False,yes,False,-0.16,0.05631128999999998,0.021025000000000005
+Player prop,Jordan Love 400+ pass yds,YES,0.05,0.0599,0.04,False,no,False,-0.06,0.0035880100000000004,0.0016
+Player prop,Jordan Love 350+ pass yds,YES,0.13,0.1672,0.125,False,no,False,-0.14,0.027955839999999996,0.015625
+Player prop,Jordan Love 300+ pass yds,YES,0.31,0.3628,0.305,False,no,False,-0.33,0.13162384000000002,0.093025
+Player prop,Jordan Love 250+ pass yds,YES,0.58,0.5962,0.575,False,yes,True,0.4,0.16305444000000005,0.18062500000000004
+Player prop,Jordan Love 200+ pass yds,NO,0.2,0.8044,0.81,False,yes,False,-0.22,0.03825936,0.03609999999999998
+Player prop,Bryce Young 40+ rush yds,YES,0.06,0.0563,0.05,False,no,False,-0.07,0.00316969,0.0025000000000000005
+Player prop,Bryce Young 30+ rush yds,NO,0.91,0.0939,0.095,False,no,True,0.08,0.008817209999999999,0.009025
+Player prop,Bryce Young 25+ rush yds,NO,0.85,0.1318,0.155,False,no,True,0.14,0.01737124,0.024025
+Player prop,Bryce Young 20+ rush yds,NO,0.77,0.1759,0.235,False,no,True,0.21,0.03094081,0.055224999999999996
+Player prop,Bryce Young 15+ rush yds,NO,0.67,0.2455,0.335,False,no,True,0.31,0.06027025,0.11222500000000002
+Player prop,Bryce Young 10+ rush yds,NO,0.49,0.3419,0.515,False,no,True,0.49,0.11689560999999998,0.265225
+Player prop,Chuba Hubbard 150+ rush yds,YES,0.05,0.0489,0.045,False,no,False,-0.06,0.00239121,0.002025
+Player prop,Chuba Hubbard 140+ rush yds,YES,0.06,0.0585,0.05,False,no,False,-0.07,0.0034222500000000004,0.0025000000000000005
+Player prop,Chuba Hubbard 130+ rush yds,YES,0.08,0.0774,0.07,False,no,False,-0.09,0.0059907599999999995,0.004900000000000001
+Player prop,Chuba Hubbard 120+ rush yds,NO,0.9,0.0948,0.105,False,no,True,0.09,0.00898704,0.011024999999999998
+Player prop,Chuba Hubbard 110+ rush yds,NO,0.85,0.1234,0.155,False,no,True,0.14,0.01522756,0.024025
+Player prop,Chuba Hubbard 100+ rush yds,NO,0.79,0.1638,0.215,False,no,True,0.19,0.02683044,0.046224999999999995
+Player prop,Chuba Hubbard 90+ rush yds,NO,0.71,0.2093,0.295,False,no,True,0.27,0.043806490000000003,0.08702499999999999
+Player prop,Chuba Hubbard 80+ rush yds,NO,0.62,0.2731,0.385,False,yes,False,-0.64,0.52838361,0.378225
+Player prop,Chuba Hubbard 70+ rush yds,NO,0.51,0.3512,0.495,False,yes,False,-0.53,0.42094144000000006,0.255025
+Player prop,Chuba Hubbard 60+ rush yds,NO,0.39,0.4413,0.615,False,yes,False,-0.41,0.31214569,0.148225
+Player prop,Chuba Hubbard 50+ rush yds,NO,0.29,0.5354,0.715,False,yes,False,-0.31,0.21585316000000002,0.08122500000000002
+Player prop,Chuba Hubbard 40+ rush yds,NO,0.19,0.6399,0.815,False,yes,False,-0.21,0.12967200999999998,0.03422500000000002
+Player prop,Jordan Love 30+ rush yds,YES,0.08,0.0769,0.07,False,no,False,-0.09,0.00591361,0.004900000000000001
+Player prop,Jordan Love 25+ rush yds,YES,0.08,0.1115,0.075,False,no,False,-0.09,0.01243225,0.005625
+Player prop,Jordan Love 20+ rush yds,YES,0.13,0.1557,0.125,False,no,False,-0.14,0.024242490000000002,0.015625
+Player prop,Jordan Love 15+ rush yds,YES,0.22,0.2197,0.215,False,no,False,-0.24,0.04826809,0.046224999999999995
+Player prop,Jordan Love 10+ rush yds,NO,0.66,0.3228,0.345,False,no,True,0.32,0.10419983999999999,0.11902499999999998
+Player prop,Jordan Love 5+ rush yds,NO,0.5,0.4711,0.51,False,no,True,0.48,0.22193521000000002,0.2601
+Player prop,Tommy Tremble 60+ rec yds,YES,0.06,0.0626,0.05,False,no,False,-0.07,0.00391876,0.0025000000000000005
+Player prop,Tommy Tremble 50+ rec yds,YES,0.08,0.0971,0.075,False,no,False,-0.09,0.009428410000000002,0.005625
+Player prop,Tommy Tremble 40+ rec yds,YES,0.14,0.1585,0.135,False,no,False,-0.15,0.025122250000000002,0.018225
+Player prop,Tommy Tremble 30+ rec yds,YES,0.23,0.2561,0.225,False,no,False,-0.25,0.06558720999999999,0.050625
+Player prop,Tommy Tremble 25+ rec yds,YES,0.3,0.3231,0.295,False,no,False,-0.32,0.10439361,0.08702499999999999
+Player prop,Tommy Tremble 20+ rec yds,NO,0.6,0.3976,0.405,False,no,True,0.38,0.15808576000000002,0.16402500000000003
+Player prop,Tommy Tremble 15+ rec yds,NO,0.5,0.4856,0.51,False,yes,False,-0.52,0.26460735999999996,0.24009999999999998
+Player prop,Tommy Tremble 10+ rec yds,NO,0.36,0.6001,0.65,False,yes,False,-0.38,0.15992001000000003,0.12249999999999998
+Player prop,John Metchie III 60+ rec yds,YES,0.09,0.1071,0.085,False,no,False,-0.1,0.01147041,0.007225000000000001
+Player prop,John Metchie III 50+ rec yds,YES,0.11,0.1585,0.105,False,no,False,-0.12,0.025122250000000002,0.011024999999999998
+Player prop,John Metchie III 40+ rec yds,YES,0.17,0.2339,0.165,False,no,False,-0.18,0.05470921,0.027225000000000003
+Player prop,John Metchie III 30+ rec yds,YES,0.27,0.3343,0.265,False,no,False,-0.29,0.11175648999999999,0.07022500000000001
+Player prop,John Metchie III 25+ rec yds,YES,0.34,0.3969,0.335,False,no,False,-0.36,0.15752961,0.11222500000000002
+Player prop,John Metchie III 20+ rec yds,YES,0.42,0.4665,0.415,False,no,False,-0.44,0.21762225000000002,0.172225
+Player prop,John Metchie III 15+ rec yds,YES,0.53,0.5526,0.525,False,no,False,-0.55,0.30536675999999996,0.275625
+Player prop,John Metchie III 10+ rec yds,NO,0.36,0.6399,0.645,False,yes,False,-0.38,0.12967200999999998,0.126025
+Player prop,Tetairoa McMillan 160+ rec yds,NO,0.96,0.0485,0.05,False,no,True,0.03,0.00235225,0.0025000000000000005
+Player prop,Tetairoa McMillan 150+ rec yds,YES,0.07,0.0613,0.06,False,no,False,-0.08,0.00375769,0.0036
+Player prop,Tetairoa McMillan 140+ rec yds,NO,0.92,0.0807,0.09,False,no,True,0.07,0.006512489999999999,0.0081
+Player prop,Tetairoa McMillan 130+ rec yds,NO,0.88,0.101,0.125,False,no,True,0.11,0.010201000000000002,0.015625
+Player prop,Tetairoa McMillan 120+ rec yds,NO,0.84,0.1274,0.17,False,no,True,0.15,0.016230760000000004,0.028900000000000006
+Player prop,Tetairoa McMillan 110+ rec yds,NO,0.8,0.164,0.205,False,no,True,0.18,0.026896000000000003,0.04202499999999999
+Player prop,Tetairoa McMillan 100+ rec yds,NO,0.74,0.2064,0.265,False,no,True,0.24,0.04260096,0.07022500000000001
+Player prop,Tetairoa McMillan 90+ rec yds,NO,0.67,0.255,0.335,False,no,True,0.31,0.065025,0.11222500000000002
+Player prop,Tetairoa McMillan 80+ rec yds,NO,0.57,0.3189,0.435,False,no,True,0.41,0.10169721000000001,0.189225
+Player prop,Tetairoa McMillan 70+ rec yds,NO,0.48,0.3912,0.525,False,no,True,0.5,0.15303744,0.275625
+Player prop,Tetairoa McMillan 60+ rec yds,NO,0.39,0.4731,0.615,False,no,True,0.59,0.22382361,0.378225
+Player prop,Tetairoa McMillan 50+ rec yds,NO,0.3,0.5647,0.705,False,yes,False,-0.32,0.18948609000000002,0.08702500000000002
+Player prop,Tetairoa McMillan 40+ rec yds,NO,0.21,0.6632,0.795,False,yes,False,-0.23,0.11343423999999999,0.042024999999999986
+Player prop,Chuba Hubbard 60+ rec yds,NO,0.97,0.0361,0.045,False,no,True,0.02,0.00130321,0.002025
+Player prop,Chuba Hubbard 50+ rec yds,NO,0.93,0.0628,0.085,False,no,True,0.06,0.00394384,0.007225000000000001
+Player prop,Chuba Hubbard 40+ rec yds,NO,0.86,0.1075,0.145,False,no,True,0.13,0.011556249999999999,0.021025
+Player prop,Chuba Hubbard 30+ rec yds,NO,0.75,0.1969,0.255,False,yes,False,-0.77,0.6449696100000001,0.555025
+Player prop,Chuba Hubbard 25+ rec yds,NO,0.67,0.2579,0.335,False,yes,False,-0.69,0.5507124099999999,0.44222500000000003
+Player prop,Chuba Hubbard 20+ rec yds,NO,0.58,0.3364,0.425,False,yes,False,-0.6,0.44036495999999997,0.33062499999999995
+Player prop,Chuba Hubbard 15+ rec yds,NO,0.45,0.4344,0.555,False,yes,False,-0.47,0.31990335999999997,0.19802499999999995
+Player prop,Chuba Hubbard 10+ rec yds,NO,0.33,0.5566,0.68,False,yes,False,-0.35,0.19660356,0.10239999999999996
+Player prop,Tucker Kraft 90+ rec yds,YES,0.12,0.1215,0.115,False,no,False,-0.13,0.01476225,0.013225
+Player prop,Tucker Kraft 80+ rec yds,YES,0.16,0.1666,0.155,False,no,False,-0.17,0.02775556,0.024025
+Player prop,Tucker Kraft 70+ rec yds,NO,0.78,0.2246,0.225,False,no,True,0.2,0.050445159999999996,0.050625
+Player prop,Tucker Kraft 60+ rec yds,YES,0.31,0.3098,0.305,False,no,False,-0.33,0.09597604000000001,0.093025
+Player prop,Tucker Kraft 50+ rec yds,NO,0.58,0.4049,0.425,False,yes,False,-0.6,0.35414400999999995,0.33062499999999995
+Player prop,Tucker Kraft 40+ rec yds,NO,0.45,0.5255,0.555,False,yes,False,-0.47,0.22515025000000002,0.19802499999999995
+Player prop,Tucker Kraft 30+ rec yds,NO,0.3,0.6557,0.705,False,yes,False,-0.32,0.11854249000000003,0.08702500000000002
+Player prop,Tucker Kraft 25+ rec yds,NO,0.28,0.7196,0.74,False,yes,False,-0.3,0.07862415999999998,0.06760000000000001
+Player prop,Tucker Kraft 20+ rec yds,NO,0.2,0.7821,0.805,False,yes,False,-0.22,0.047480409999999994,0.03802499999999998
+Player prop,Tucker Kraft 120+ rec yds,YES,0.04,0.0408,0.03,False,no,False,-0.05,0.0016646400000000002,0.0009
+Player prop,Tucker Kraft 110+ rec yds,YES,0.06,0.0613,0.05,False,no,False,-0.07,0.00375769,0.0025000000000000005
+Player prop,Tucker Kraft 100+ rec yds,YES,0.1,0.0891,0.08,False,no,False,-0.11,0.00793881,0.0064
+Player prop,Matthew Golden 90+ rec yds,YES,0.24,0.2568,0.235,False,no,False,-0.26,0.06594623999999999,0.055224999999999996
+Player prop,Matthew Golden 80+ rec yds,YES,0.31,0.3196,0.305,False,no,False,-0.33,0.10214416,0.093025
+Player prop,Matthew Golden 70+ rec yds,YES,0.39,0.3916,0.38,False,yes,True,0.59,0.3701505600000001,0.3844
+Player prop,Matthew Golden 60+ rec yds,NO,0.51,0.4745,0.495,False,yes,False,-0.53,0.2761502500000001,0.255025
+Player prop,Matthew Golden 50+ rec yds,NO,0.42,0.5664,0.585,False,yes,False,-0.44,0.18800895999999997,0.17222500000000002
+Player prop,Matthew Golden 40+ rec yds,NO,0.32,0.6639,0.685,False,yes,False,-0.34,0.11296320999999997,0.09922499999999997
+Player prop,Matthew Golden 30+ rec yds,NO,0.2,0.7569,0.805,False,yes,False,-0.22,0.059097609999999995,0.03802499999999998
+Player prop,Matthew Golden 25+ rec yds,NO,0.18,0.8003,0.83,False,yes,False,-0.2,0.03988008999999999,0.028900000000000012
+Player prop,Matthew Golden 140+ rec yds,YES,0.06,0.0809,0.055,False,no,False,-0.07,0.00654481,0.003025
+Player prop,Matthew Golden 130+ rec yds,YES,0.08,0.1012,0.06,False,no,False,-0.09,0.01024144,0.0036
+Player prop,Matthew Golden 120+ rec yds,YES,0.11,0.1278,0.095,False,no,False,-0.12,0.016332839999999998,0.009025
+Player prop,Matthew Golden 110+ rec yds,YES,0.14,0.1649,0.135,False,no,False,-0.15,0.027192009999999996,0.018225
+Player prop,Matthew Golden 100+ rec yds,YES,0.18,0.2081,0.175,False,no,False,-0.2,0.04330561,0.030624999999999996
+Player prop,Christian Watson 90+ rec yds,NO,0.66,0.2909,0.345,False,yes,False,-0.68,0.5028228100000001,0.42902500000000005
+Player prop,Christian Watson 80+ rec yds,NO,0.59,0.3564,0.415,False,yes,False,-0.61,0.4142209599999999,0.34222499999999995
+Player prop,Christian Watson 70+ rec yds,NO,0.5,0.428,0.505,False,yes,False,-0.52,0.3271840000000001,0.245025
+Player prop,Christian Watson 60+ rec yds,NO,0.41,0.5099,0.595,False,yes,False,-0.43,0.24019801,0.16402500000000003
+Player prop,Christian Watson 50+ rec yds,NO,0.33,0.5948,0.675,False,yes,False,-0.35,0.16418704,0.10562499999999997
+Player prop,Christian Watson 40+ rec yds,NO,0.27,0.6856,0.755,False,yes,False,-0.29,0.09884736000000001,0.060024999999999995
+Player prop,Christian Watson 30+ rec yds,NO,0.15,0.7751,0.855,False,yes,False,-0.16,0.050580009999999995,0.021025000000000005
+Player prop,Christian Watson 170+ rec yds,YES,0.05,0.0497,0.04,False,no,False,-0.06,0.0024700900000000003,0.0016
+Player prop,Christian Watson 160+ rec yds,YES,0.07,0.0618,0.055,False,no,False,-0.08,0.0038192400000000002,0.003025
+Player prop,Christian Watson 150+ rec yds,YES,0.07,0.0805,0.065,False,no,False,-0.08,0.006480250000000001,0.0042250000000000005
+Player prop,Christian Watson 140+ rec yds,NO,0.9,0.0996,0.105,False,no,True,0.09,0.009920159999999999,0.011024999999999998
+Player prop,Christian Watson 130+ rec yds,YES,0.13,0.1243,0.12,False,no,False,-0.14,0.015450489999999999,0.0144
+Player prop,Christian Watson 120+ rec yds,NO,0.83,0.1551,0.175,False,no,True,0.16,0.024056009999999996,0.030624999999999996
+Player prop,Christian Watson 110+ rec yds,NO,0.8,0.1931,0.205,False,yes,False,-0.82,0.6510876099999999,0.6320250000000001
+Player prop,Christian Watson 100+ rec yds,NO,0.74,0.2344,0.265,False,yes,False,-0.76,0.5861433600000001,0.540225
+Player prop,Tommy Tremble 7+ receptions,YES,0.04,0.0296,0.025,False,no,False,-0.05,0.0008761600000000001,0.0006250000000000001
+Player prop,Tommy Tremble 6+ receptions,YES,0.06,0.0563,0.045,False,no,False,-0.07,0.00316969,0.002025
+Player prop,Tommy Tremble 5+ receptions,YES,0.11,0.104,0.095,False,no,False,-0.12,0.010816,0.009025
+Player prop,Tommy Tremble 4+ receptions,NO,0.8,0.1832,0.21,False,no,True,0.18,0.03356224,0.04409999999999999
+Player prop,Tommy Tremble 3+ receptions,NO,0.61,0.3464,0.395,False,no,True,0.37,0.11999296,0.15602500000000002
+Player prop,Tommy Tremble 2+ receptions,NO,0.39,0.5832,0.615,False,no,True,0.59,0.3401222400000001,0.378225
+Player prop,John Metchie III 6+ receptions,YES,0.05,0.0565,0.04,False,no,False,-0.06,0.00319225,0.0016
+Player prop,John Metchie III 5+ receptions,YES,0.08,0.1152,0.06,False,no,False,-0.09,0.01327104,0.0036
+Player prop,John Metchie III 4+ receptions,YES,0.16,0.1936,0.145,False,no,False,-0.17,0.03748096,0.021025
+Player prop,John Metchie III 3+ receptions,YES,0.31,0.3596,0.3,False,yes,True,0.67,0.4101121600000001,0.48999999999999994
+Player prop,John Metchie III 2+ receptions,YES,0.56,0.5879,0.555,False,yes,True,0.42,0.16982641,0.19802499999999995
+Player prop,Tucker Kraft 9+ receptions,YES,0.06,0.0635,0.045,False,no,False,-0.07,0.00403225,0.002025
+Player prop,Tucker Kraft 8+ receptions,YES,0.12,0.1135,0.1,False,no,False,-0.13,0.012882250000000001,0.010000000000000002
+Player prop,Tucker Kraft 7+ receptions,NO,0.83,0.1779,0.175,False,no,True,0.16,0.03164841,0.030624999999999996
+Player prop,Tucker Kraft 6+ receptions,NO,0.72,0.2788,0.295,False,yes,False,-0.74,0.52012944,0.4970250000000001
+Player prop,Tucker Kraft 5+ receptions,NO,0.54,0.414,0.465,False,yes,False,-0.56,0.3433960000000001,0.2862249999999999
+Player prop,Tucker Kraft 4+ receptions,NO,0.38,0.5805,0.63,False,yes,False,-0.4,0.17598024999999998,0.1369
+Player prop,Tucker Kraft 3+ receptions,YES,0.77,0.7563,0.755,False,yes,True,0.21,0.059389690000000016,0.060024999999999995
+Player prop,Tucker Kraft 2+ receptions,NO,0.13,0.8678,0.88,False,yes,False,-0.14,0.017476839999999997,0.0144
+Player prop,Tucker Kraft 11+ receptions,NO,0.99,0.0206,0.025,False,no,True,0.0,0.00042436000000000004,0.0006250000000000001
+Player prop,Tucker Kraft 10+ receptions,YES,0.05,0.0381,0.035,False,no,False,-0.06,0.00145161,0.0012250000000000002
+Player prop,Christian Watson 9+ receptions,YES,0.08,0.0886,0.075,False,no,False,-0.09,0.00784996,0.005625
+Player prop,Christian Watson 8+ receptions,YES,0.14,0.1466,0.135,False,yes,True,0.85,0.7282915599999998,0.748225
+Player prop,Christian Watson 7+ receptions,NO,0.77,0.2233,0.235,False,yes,False,-0.79,0.6032628899999999,0.585225
+Player prop,Christian Watson 6+ receptions,NO,0.64,0.3208,0.365,False,yes,False,-0.66,0.46131264000000005,0.403225
+Player prop,Christian Watson 5+ receptions,NO,0.48,0.4665,0.525,False,yes,False,-0.5,0.28462224999999997,0.225625
+Player prop,Christian Watson 4+ receptions,NO,0.32,0.61,0.685,False,yes,False,-0.34,0.1521,0.09922499999999997
+Player prop,Christian Watson 3+ receptions,NO,0.22,0.7778,0.79,False,yes,False,-0.24,0.04937283999999998,0.044099999999999986
+Player prop,Christian Watson 2+ receptions,NO,0.08,0.8883,0.925,False,yes,False,-0.09,0.012476890000000004,0.005624999999999994
+Player prop,Christian Watson 11+ receptions,NO,0.97,0.0295,0.035,False,no,True,0.02,0.0008702499999999999,0.0012250000000000002
+Player prop,Christian Watson 10+ receptions,YES,0.06,0.0523,0.045,False,no,False,-0.07,0.00273529,0.002025
+Player prop,Tetairoa McMillan 9+ receptions,YES,0.11,0.1151,0.105,False,no,False,-0.12,0.01324801,0.011024999999999998
+Player prop,Tetairoa McMillan 8+ receptions,NO,0.81,0.1779,0.195,False,no,True,0.17,0.03164841,0.038025
+Player prop,Tetairoa McMillan 7+ receptions,NO,0.69,0.2679,0.315,False,no,True,0.29,0.07177041000000002,0.09922500000000001
+Player prop,Tetairoa McMillan 6+ receptions,NO,0.55,0.3734,0.455,False,yes,False,-0.57,0.39262756000000004,0.29702499999999993
+Player prop,Tetairoa McMillan 5+ receptions,NO,0.38,0.5166,0.625,False,yes,False,-0.4,0.23367556000000006,0.140625
+Player prop,Tetairoa McMillan 4+ receptions,NO,0.23,0.6611,0.775,False,yes,False,-0.25,0.11485320999999998,0.05062499999999999
+Player prop,Tetairoa McMillan 3+ receptions,NO,0.14,0.7977,0.87,False,yes,False,-0.15,0.04092529000000002,0.016900000000000002
+Player prop,Tetairoa McMillan 11+ receptions,YES,0.05,0.0486,0.04,False,no,False,-0.06,0.0023619599999999998,0.0016
+Player prop,Tetairoa McMillan 10+ receptions,YES,0.08,0.0751,0.07,False,no,False,-0.09,0.00564001,0.004900000000000001
+Player prop,Chuba Hubbard 7+ receptions,NO,0.96,0.0448,0.045,False,yes,False,-0.97,0.9124070400000001,0.912025
+Player prop,Chuba Hubbard 6+ receptions,NO,0.92,0.0768,0.085,False,yes,False,-0.93,0.85229824,0.8372250000000001
+Player prop,Chuba Hubbard 5+ receptions,NO,0.85,0.1393,0.155,False,yes,False,-0.86,0.74080449,0.7140249999999999
+Player prop,Chuba Hubbard 4+ receptions,NO,0.71,0.2389,0.295,False,yes,False,-0.73,0.57927321,0.4970250000000001
+Player prop,Chuba Hubbard 3+ receptions,NO,0.5,0.4024,0.505,False,yes,False,-0.52,0.35712576,0.245025
+Player prop,Chuba Hubbard 2+ receptions,NO,0.28,0.6141,0.725,False,yes,False,-0.3,0.14891881,0.07562500000000001

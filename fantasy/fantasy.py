@@ -1,0 +1,830 @@
+"""
+Weekly fantasy football projections (standard, half-PPR, PPR)
+=============================================================
+Built on the same free nflverse data as the game engine, and on its game projections
+(nfl_engine/v2/output/predictions.csv) for each team's expected points.
+
+For every skill player:   points = volume x efficiency x game environment x opponent
+  * volume      pass attempts, carries and targets per game, exponentially weighted toward
+                recent games (older seasons count less).
+  * efficiency  yards, TDs, catches and INTs per opportunity, shrunk toward the position average
+                so a few long TDs don't get extrapolated.
+  * environment the team's expected points this week (Vegas implied total blended with the
+                engine where a line exists, engine alone for later weeks) relative to what the
+                team has been scoring.
+  * opponent    fantasy points the opponent has allowed to that position vs league average.
+  * availability depth-chart QB1 gets the QB volume (backups only by P(QB1 out)); injury
+                designations and practice reports give P(out); bye weeks are 0.
+  * engine data  the game engine's own feature code (players.py, engine.team_form), imported read-only:
+                QB ratings (receivers move with this week's starter vs the QBs in their history),
+                opponent-adjusted pass/run defense EPA, snap-share trend, and part of an absent
+                regular's targets/carries handed to healthy teammates. Rest, travel, Elo and team
+                injuries reach players through the engine's projected team points.
+Kickers and team defenses (DST) are projected from their own recent scoring and the matchup.
+
+Usage:  python fantasy.py            download + project current week and the rest of season
+        python fantasy.py backtest   walk-forward accuracy check
+        --no-download                reuse data/
+"""
+import json, os, sys, urllib.request
+from datetime import datetime, timezone
+import numpy as np, pandas as pd
+import matchups as M
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DATA = os.path.join(HERE, "data")
+OUT = os.path.join(HERE, "output")
+ENGINE_DIR = "/mnt/project-files/nfl_engine/v2"
+ENGINE_PRED = os.path.join(ENGINE_DIR, "output", "predictions.csv")
+SEASON = 2026
+YEARS = range(SEASON - 3, SEASON + 1)
+REL = "https://github.com/nflverse/nflverse-data/releases/download"
+TEAM_FIX = {"OAK": "LV", "SD": "LAC", "STL": "LA"}
+SKILL = ["QB", "RB", "WR", "TE"]
+
+HALFLIFE = 8          # games
+SEASON_KEEP = 0.6     # weight kept on each older season
+ENV_VOL, ENV_TD = 0.3, 1.0   # how strongly team expected points move volume/yards and TDs
+OPP_W = 0.0           # exponent on the opponent-allowed ratio (replaced by COMP_W's stat-by-stat version)
+OPP_PRIOR = 4         # games of league-average evidence each defense starts with
+# shrinkage for efficiency rates: opportunities of position-average evidence
+SHRINK = {"cmp_att": 150, "pyd_att": 150, "ptd_att": 300, "int_att": 400,
+          "ryd_car": 80, "rtd_car": 150, "rec_tgt": 40, "wyd_tgt": 60, "wtd_tgt": 120}
+# engine data points (QB ratings, opponent-adjusted pass/run defense EPA, snap shares, teammate absences)
+QB_W = 0.5            # pass-catcher efficiency moves exp(QB_W x (this week's QB rating - QB rating in his history))
+DEF_W = 0.25          # pass/rush output moves exp(DEF_W x opponent's adjusted EPA allowed per play vs league average)
+SNAP_W = 0.3          # volume moves (recent snap share / weighted snap share) ^ SNAP_W
+REDIST = 0.15         # share of an absent teammate's targets/carries handed to the healthy players
+FILL_W = 0.5          # how much of a backup's fill-in volume is taken back when the starter he replaced returns
+GIVE_W = 0.0          # share of that taken-back volume handed to the returning player
+CONC_W = 1.0          # carries/targets within a team are reshaped to share ^ CONC_W (>1 favors the lead player)
+NORM_W = 0.75         # pull each team's summed carries/targets toward its own recent per-game total
+# matchup data (matchups.py)
+COMP_W = 0.3          # exponent on the opponent's stat-by-stat allowed ratios (rush vs pass, by position)
+# Shown on the page but kept out of the projection: in the walk-forward backtest neither moved error by more
+# than 0.01 pts, a player's man-vs-zone split barely repeats year to year (r=0.15, 2024->2025) and his split vs
+# top-5 defenses doesn't repeat at all (r=-0.03).
+MZ_W = 0.0            # exponent on the man/zone matchup (opponent man rate x player's man/zone split)
+T5_W = 0.0            # exponent on a player's own split vs top-5 defenses (applied when facing one)
+T5_TEAM_W = 0.0       # same for the offense's position group
+STATUS_P = {"Out": 1.0, "Doubtful": 0.8, "Questionable": 0.25}
+INACTIVE = {"RES", "CUT", "RET", "TRD", "TRT", "EXE", "DEV", "SUS", "NWT"}
+
+# ----------------------------------------------------------------------------- data
+def download():
+    os.makedirs(DATA, exist_ok=True)
+    files = {"games.csv": "schedules/games.csv", f"injuries_{SEASON}.csv": f"injuries/injuries_{SEASON}.csv",
+             f"roster_{SEASON}.csv": f"weekly_rosters/roster_weekly_{SEASON}.csv",
+             f"depth_{SEASON}.csv": f"depth_charts/depth_charts_{SEASON}.csv"}
+    files["players.csv"] = "players/players.csv"
+    for y in YEARS:
+        files[f"player_{y}.csv"] = f"stats_player/stats_player_week_{y}.csv"
+        files[f"snaps_{y}.csv"] = f"snap_counts/snap_counts_{y}.csv"
+        files[f"team_{y}.csv"] = f"stats_team/stats_team_week_{y}.csv"
+    for y in YEARS:
+        files[f"pbp_{y}.csv.gz"] = f"pbp/play_by_play_{y}.csv.gz"
+        if y < SEASON:
+            files[f"part_{y}.csv"] = f"pbp_participation/pbp_participation_{y}.csv"
+    for name, rel in files.items():
+        path = os.path.join(DATA, name)
+        if os.path.exists(path) and str(SEASON) not in name and name not in ("games.csv", "players.csv"):
+            continue
+        try:
+            urllib.request.urlretrieve(f"{REL}/{rel}", path + ".part")
+            os.replace(path + ".part", path)
+        except Exception as e:
+            print(f"  could not download {name}: {e}")
+
+
+def load():
+    read = lambda n, **kw: pd.read_csv(os.path.join(DATA, n), low_memory=False, **kw)
+    g = read("games.csv")
+    for c in ("home_team", "away_team"):
+        g[c] = g[c].replace(TEAM_FIX)
+    g = g[(g.season >= min(YEARS)) & (g.game_type == "REG")].copy()
+    s = pd.concat([read(f"player_{y}.csv") for y in YEARS], ignore_index=True)
+    s = s[s.season_type == "REG"].copy()
+    for c in ("team", "opponent_team"):
+        s[c] = s[c].replace(TEAM_FIX)
+    snaps = pd.concat([read(f"snaps_{y}.csv") for y in YEARS if os.path.exists(os.path.join(DATA, f"snaps_{y}.csv"))],
+                      ignore_index=True)
+    team = pd.concat([read(f"team_{y}.csv") for y in YEARS], ignore_index=True)
+    return dict(games=g, stats=s, inj=read(f"injuries_{SEASON}.csv"), snaps=snaps, team=team,
+                players=read("players.csv", usecols=["gsis_id", "pfr_id"]),
+                roster=read(f"roster_{SEASON}.csv"),
+                depth=read(f"depth_{SEASON}.csv", usecols=["dt", "team", "player_name", "gsis_id", "pos_abb", "pos_rank"]))
+
+
+def key(season, week):
+    return season * 100 + week
+
+# ----------------------------------------------------------------------------- scoring
+def components(s):
+    f = lambda c: s[c].fillna(0) if c in s else 0
+    c = pd.DataFrame({
+        "att": f("attempts"), "cmp": f("completions"), "pyd": f("passing_yards"), "ptd": f("passing_tds"),
+        "int": f("passing_interceptions"), "car": f("carries"), "ryd": f("rushing_yards"), "rtd": f("rushing_tds"),
+        "tgt": f("targets"), "rec": f("receptions"), "wyd": f("receiving_yards"), "wtd": f("receiving_tds"),
+        "fl": f("sack_fumbles_lost") + f("rushing_fumbles_lost") + f("receiving_fumbles_lost"),
+        "two": f("passing_2pt_conversions") + f("rushing_2pt_conversions") + f("receiving_2pt_conversions"),
+        "sttd": f("special_teams_tds")}, index=s.index)
+    return c
+
+
+def points(c, ppr):
+    return (0.04 * c.pyd + 4 * c.ptd - 2 * c["int"] + 0.1 * (c.ryd + c.wyd) + 6 * (c.rtd + c.wtd + c.sttd)
+            - 2 * c.fl + 2 * c.two + ppr * c.rec)
+
+
+def kicker_points(s):
+    f = lambda c: s[c].fillna(0)
+    return (3 * (f("fg_made_0_19") + f("fg_made_20_29") + f("fg_made_30_39")) + 4 * f("fg_made_40_49")
+            + 5 * (f("fg_made_50_59") + f("fg_made_60_")) + f("pat_made") - f("fg_missed") - f("pat_missed"))
+
+
+def pa_points(pa):
+    return np.select([pa == 0, pa <= 6, pa <= 13, pa <= 20, pa <= 27, pa <= 34], [10, 7, 4, 1, 0, -1], -4)
+
+# ----------------------------------------------------------------------------- team context
+def team_games(g):
+    """One row per team per game with points for and against."""
+    h = g.rename(columns={"home_team": "team", "away_team": "opp", "home_score": "pf", "away_score": "pa"})
+    a = g.rename(columns={"away_team": "team", "home_team": "opp", "away_score": "pf", "home_score": "pa"})
+    h["home"], a["home"] = 1, 0
+    a["spread_line"] = -a["spread_line"]
+    t = pd.concat([h, a], ignore_index=True)[["game_id", "season", "week", "team", "opp", "home", "pf", "pa",
+                                               "spread_line", "total_line"]]
+    t["vegas_pts"] = (t.total_line + t.spread_line) / 2
+    t["key"] = key(t.season, t.week)
+    return t
+
+
+def ew_weights(hist, tkey, by):
+    """Recency weights within each group: 0.5^(games ago / HALFLIFE) x SEASON_KEEP^(seasons ago)."""
+    hist = hist[hist.key < tkey].sort_values("key")
+    ago = hist.groupby(by).cumcount(ascending=False)
+    w = 0.5 ** (ago / HALFLIFE) * SEASON_KEEP ** (tkey // 100 - hist.season)
+    return hist.assign(w=w.values)
+
+
+def team_baseline(tg, tkey):
+    """Recency-weighted points scored and allowed per team before `tkey`."""
+    played = tg[tg.pf.notna()]
+    h = ew_weights(played, tkey, "team")
+    lg = played[played.key < tkey].pf.mean()
+    agg = h.assign(wpf=h.w * h.pf, wpa=h.w * h.pa).groupby("team")[["w", "wpf", "wpa"]].sum()
+    prior = 2.0
+    return pd.DataFrame({"pf": (agg.wpf + prior * lg) / (agg.w + prior),
+                         "pa": (agg.wpa + prior * lg) / (agg.w + prior)}), lg
+
+
+def opponent_factors(s, tkey):
+    """Fantasy points (half-PPR) allowed per game to each position, relative to league average."""
+    sk = s[s.position.isin(SKILL) & (s.key < tkey)]
+    per = sk.groupby(["opponent_team", "position", "game_id", "season", "key"]).half.sum().reset_index()
+    per = per.rename(columns={"opponent_team": "defense"})
+    out = []
+    for pos, x in per.groupby("position"):
+        lg = x.half.mean()
+        h = ew_weights(x, tkey, "defense")
+        agg = h.assign(wp=h.w * h.half).groupby("defense")[["w", "wp"]].sum()
+        ratio = (agg.wp + OPP_PRIOR * lg) / (agg.w + OPP_PRIOR) / lg
+        out.append(pd.DataFrame({"defense": ratio.index, "position": pos, "opp_ratio": ratio.values}))
+    return pd.concat(out, ignore_index=True)
+
+# ----------------------------------------------------------------------------- engine data points
+def engine_modules():
+    """The game engine's own feature code (read-only import, so both models use the same definitions)."""
+    if ENGINE_DIR not in sys.path:
+        sys.path.insert(0, ENGINE_DIR)
+    import players as P, engine as E
+    return P, E
+
+
+def engine_context(d, s):
+    """Adds per-game QB rating and snap share to player rows; returns the engine's team form and QB ratings."""
+    P, E = engine_modules()
+    q, ratings, rep = P.qb_ratings(P.qb_games(d["stats"]))
+    st = q[q.starter]
+    qb_of = dict(zip(zip(st.game_id, st.team), st.qb_rating))
+    s["team_qb"] = [qb_of.get(k, rep) for k in zip(s.game_id, s.team)]
+    ids = d["players"].dropna(subset=["pfr_id"]).drop_duplicates("pfr_id").set_index("pfr_id").gsis_id
+    sn = d["snaps"].assign(gsis_id=lambda x: x.pfr_player_id.map(ids)).dropna(subset=["gsis_id"])
+    snap_of = dict(zip(zip(sn.gsis_id, sn.game_id), sn.offense_pct))
+    s["snap"] = [snap_of.get(k, np.nan) for k in zip(s.player_id, s.game_id)]
+    form = E.team_form(d["games"], d["team"])
+    form["season"] = pd.to_numeric(form.game_id.str[:4], errors="coerce")
+    for c in ("f_adj_pass_def", "f_adj_rush_def"):
+        form[c + "_c"] = form[c] - form.groupby("season")[c].transform("mean").fillna(form[c].mean())
+    latest = form[form.game_id.isna()].set_index("team")
+    lat_mean = latest[["f_adj_pass_def", "f_adj_rush_def"]].mean()
+    for c in ("f_adj_pass_def", "f_adj_rush_def"):
+        latest[c + "_c"] = latest[c] - lat_mean[c]
+    return dict(form=form.dropna(subset=["game_id"]).set_index(["game_id", "team"]), latest=latest,
+                ratings=ratings, rep=rep, P=P)
+
+
+def defense_now(ctx, sched, live_week=False):
+    """Opponent's adjusted pass/rush EPA allowed (centered) for each team's game this week."""
+    if live_week:
+        src = ctx["latest"]
+        get = lambda gid, opp: src.loc[opp] if opp in src.index else None
+    else:
+        src = ctx["form"]
+        get = lambda gid, opp: src.loc[(gid, opp)] if (gid, opp) in src.index else None
+    pd_, rd_ = {}, {}
+    for team, row in sched.iterrows():
+        v = get(row.game_id, row.opp)
+        pd_[team] = 0.0 if v is None or pd.isna(v["f_adj_pass_def_c"]) else float(v["f_adj_pass_def_c"])
+        rd_[team] = 0.0 if v is None or pd.isna(v["f_adj_rush_def_c"]) else float(v["f_adj_rush_def_c"])
+    return pd.Series(pd_), pd.Series(rd_)
+
+
+def redistribute(r, absent):
+    """Hands REDIST of each absent player's targets and carries to healthy teammates, by their current share."""
+    if REDIST <= 0 or not len(absent):
+        return r
+    r = r.copy()
+    for team, a in absent.groupby("team"):
+        mates = r.team == team
+        for c in ("tgt", "car"):
+            freed = a[c].sum() * REDIST
+            tot = r.loc[mates, c].sum()
+            if freed > 0 and tot > 0:
+                r.loc[mates, c] = r.loc[mates, c] * (1 + freed / tot)
+    return r
+
+def role_adjust(r, s, tkey):
+    """Workload fixes after redistribute(): (1) a regular back from 2+ missed games of his team's last 4 takes
+    back FILL_W of the volume his same-position teammates picked up in those games; (2) carries (non-QB) and
+    targets are reshaped within each team to share ^ CONC_W, keeping the team's expected total; (3) that total is
+    pulled NORM_W of the way toward the team's recency-weighted per-game total. Uses r.p_out when present."""
+    if FILL_W <= 0 and CONC_W == 1 and NORM_W <= 0:
+        return r
+    r = r.copy()
+    play = 1 - r.p_out.clip(0, 1) if "p_out" in r else pd.Series(1.0, index=r.index)
+    hist = s[(s.key < tkey) & s.position.isin(SKILL)]
+    if FILL_W > 0:
+        last4 = hist.groupby("team").key.apply(lambda k: sorted(k.unique())[-4:])
+        played = set(zip(hist.player_id, hist.team, hist.key))
+        heavy = np.where(r.position == "RB", r.car + r.tgt >= 12, r.tgt >= 6) & (r.position != "QB")
+        for rid, x in r[heavy & (r.last_team == r.team)].iterrows():
+            ks = last4.get(x.team, [])
+            missed = [k for k in ks if (rid, x.team, k) not in played]
+            if len(ks) < 4 or len(missed) < 2:
+                continue
+            c = "car" if x.position == "RB" else "tgt"
+            for mid in r.index[(r.team == x.team) & (r.position == x.position) & (r.index != rid)]:
+                mine = [k for k in ks if (mid, x.team, k) in played]
+                if mine:
+                    frac = sum(k in missed for k in mine) / len(mine)
+                    cut = r.loc[mid, c] * FILL_W * frac * play[rid]
+                    r.loc[mid, c] -= cut
+                    r.loc[rid, c] += cut * GIVE_W
+    team_tot = None
+    if NORM_W > 0:
+        g = hist.assign(car=hist.car.where(hist.position != "QB", 0)).groupby(["team", "key", "season"])[["car", "tgt"]].sum()
+        h = ew_weights(g.reset_index(), tkey, "team")
+        team_tot = h[["car", "tgt"]].multiply(h.w, axis=0).groupby(h.team).sum().div(h.w.groupby(h.team).sum(), axis=0)
+    for c in ("car", "tgt"):
+        elig = (r.position != "QB") if c == "car" else pd.Series(True, index=r.index)
+        for team, idx in r[elig].groupby("team").groups.items():
+            x, w = r.loc[idx, c].clip(lower=0), play[idx]
+            tot = (x * w).sum()
+            if tot <= 0:
+                continue
+            y = x ** CONC_W
+            y = y * tot / (y * w).sum()
+            if team_tot is not None and team in team_tot.index:
+                y = y * (team_tot.loc[team, c] / tot) ** NORM_W
+            r.loc[idx, c] = y
+    return r
+
+# ----------------------------------------------------------------------------- player model
+RATES = {"cmp_att": ("cmp", "att"), "pyd_att": ("pyd", "att"), "ptd_att": ("ptd", "att"), "int_att": ("int", "att"),
+         "ryd_car": ("ryd", "car"), "rtd_car": ("rtd", "car"), "rec_tgt": ("rec", "tgt"),
+         "wyd_tgt": ("wyd", "tgt"), "wtd_tgt": ("wtd", "tgt")}
+VOLUME = ["att", "car", "tgt", "fl", "two", "sttd"]
+
+
+def player_rates(s, tkey, lg_rates):
+    """Per-game volume and shrunk per-opportunity efficiency for each player, from games before tkey."""
+    h = ew_weights(s[s.position.isin(SKILL)], tkey, "player_id")
+    cols = list({c for v in RATES.values() for c in v} | set(VOLUME))
+    wsum = h[cols].multiply(h.w, axis=0).assign(w=h.w, player_id=h.player_id).groupby("player_id").sum()
+    last = h.groupby("player_id").tail(1).set_index("player_id")
+    r = pd.DataFrame(index=wsum.index)
+    r["position"] = last.position
+    r["name"] = last.player_display_name
+    r["last_team"] = last.team
+    r["last_key"] = last.key
+    r["games"] = h.groupby("player_id").size()
+    if "team_qb" in h:
+        r["qb_hist"] = (h.team_qb * h.w).groupby(h.player_id).sum() / wsum.w
+        hs = h.dropna(subset=["snap"])
+        r["snap_ew"] = (hs.snap * hs.w).groupby(hs.player_id).sum() / hs.w.groupby(hs.player_id).sum()
+        r["snap_recent"] = hs.groupby("player_id").snap.apply(lambda x: x.tail(2).mean())
+    for v in VOLUME:
+        r[v] = wsum[v] / wsum.w
+    for name, (num, den) in RATES.items():
+        avg = r.position.map(lg_rates[name])
+        k = SHRINK[name]
+        r[name] = (wsum[num] + k * avg) / (wsum[den] + k)
+    return r
+
+
+def league_rates(s, tkey):
+    h = s[s.position.isin(SKILL) & (s.key < tkey) & (s.key >= tkey - 300)]
+    tot = h.groupby("position")[["cmp", "att", "pyd", "ptd", "int", "ryd", "car", "rtd", "rec", "tgt", "wyd", "wtd"]].sum()
+    return {n: (tot[a] / tot[b].replace(0, np.nan)).fillna(0) for n, (a, b) in RATES.items()}
+
+
+def project_stats(r, env, opp, pass_m=1.0, rush_m=1.0, qb_m=1.0, snap_m=1.0, mx=None):
+    """Expected per-game stat line given volume/efficiency (r) and environment/opponent multipliers.
+    pass_m/rush_m: opponent pass/run defense; qb_m: pass-catcher QB quality change; snap_m: role trend."""
+    vol, td = env ** ENV_VOL * opp ** OPP_W * snap_m, env ** ENV_TD * opp ** OPP_W * snap_m
+    p = pd.DataFrame(index=r.index)
+    p["att"] = r.att * vol
+    p["cmp"] = p.att * r.cmp_att
+    p["pyd"] = p.att * r.pyd_att * pass_m
+    p["ptd"] = r.att * r.ptd_att * td * pass_m
+    p["int"] = p.att * r.int_att
+    p["car"] = r.car * vol
+    p["ryd"] = p.car * r.ryd_car * rush_m
+    p["rtd"] = r.car * r.rtd_car * td * rush_m
+    p["tgt"] = r.tgt * vol
+    p["rec"] = p.tgt * r.rec_tgt * qb_m ** 0.5
+    p["wyd"] = p.tgt * r.wyd_tgt * pass_m * qb_m
+    p["wtd"] = r.tgt * r.wtd_tgt * td * pass_m * qb_m
+    p["fl"], p["two"], p["sttd"] = r.fl, r.two * td, r.sttd
+    if mx is not None:
+        for c in M.COLS:
+            p[c] = p[c] * mx[c]
+        p["cmp"] = p["cmp"] * mx["att"]
+        p["int"] = p["int"] * mx["att"]
+    return p
+
+# ----------------------------------------------------------------------------- kickers and defenses
+def dst_games(s, tg):
+    d = s.groupby(["team", "game_id"])[["def_sacks", "def_interceptions", "fumble_recovery_opp", "def_tds",
+                                        "def_safeties"]].sum().reset_index()
+    t = tg[tg.pf.notna()].merge(d, on=["team", "game_id"], how="left").fillna(0)
+    t["dst_plays"] = (t.def_sacks + 2 * t.def_interceptions + 2 * t.fumble_recovery_opp + 6 * t.def_tds
+                      + 2 * t.def_safeties)
+    return t
+
+
+def pa_expected(mu, sd=9.5):
+    """Expected points-allowed tier score when points allowed ~ Normal(mu, sd)."""
+    xs = np.arange(0, 70)
+    pr = np.exp(-0.5 * ((xs[None, :] - np.asarray(mu)[:, None]) / sd) ** 2)
+    pr /= pr.sum(axis=1, keepdims=True)
+    return (pr * pa_points(xs)[None, :]).sum(axis=1)
+
+
+def project_k_dst(s, tg, tkey):
+    k = s[s.position == "K"].copy()
+    k["kp"] = kicker_points(k)
+    kh = ew_weights(k, tkey, "player_id")
+    ka = kh.assign(wk=kh.w * kh.kp).groupby("player_id").agg(w=("w", "sum"), wk=("wk", "sum"),
+                                                             name=("player_display_name", "last"),
+                                                             team=("team", "last"), last_key=("key", "max"))
+    ka["rate"] = (ka.wk + 2 * 8.0) / (ka.w + 2)
+    d = dst_games(s, tg)
+    dh = ew_weights(d, tkey, "team")
+    da = dh.assign(wd=dh.w * dh.dst_plays).groupby("team").agg(w=("w", "sum"), wd=("wd", "sum"))
+    lg_plays = d[d.key < tkey].dst_plays.mean()
+    da["plays"] = (da.wd + 3 * lg_plays) / (da.w + 3)
+    return ka, da
+
+# ----------------------------------------------------------------------------- weekly projection
+def score_players(r, team_of, sched, implied, base, opp_f, extra=None):
+    """extra: optional dict of per-team Series qb_now, pass_def, rush_def (engine data points)."""
+    r = r.copy()
+    r["team"] = team_of
+    r = r[r.team.isin(sched.index)]
+    r["opp"] = r.team.map(sched.opp)
+    r["implied"] = r.team.map(implied)
+    r["env"] = (r.implied / r.team.map(base.pf)).clip(0.6, 1.6)
+    r["opp_ratio"] = [opp_f.get((o, p), 1.0) for o, p in zip(r.opp, r.position)]
+    pass_m = rush_m = qb_m = snap_m = 1.0
+    if extra is not None:
+        pass_m = np.exp(DEF_W * r.team.map(extra["pass_def"]).fillna(0)).clip(0.75, 1.3)
+        rush_m = np.exp(DEF_W * r.team.map(extra["rush_def"]).fillna(0)).clip(0.75, 1.3)
+        dq = (r.team.map(extra["qb_now"]) - r.qb_hist).fillna(0)
+        qb_m = pd.Series(np.where(r.position == "QB", 1.0, np.exp(QB_W * dq)), index=r.index).clip(0.7, 1.4)
+        ratio = (r.snap_recent / r.snap_ew).where(r.snap_ew > 0.05).fillna(1.0)
+        snap_m = (ratio ** SNAP_W).clip(0.6, 1.5)
+        r["qb_now"], r["pass_m"], r["rush_m"], r["qb_m"], r["snap_m"] = r.team.map(extra["qb_now"]), pass_m, rush_m, qb_m, snap_m
+    mx = None
+    if extra is not None and "comp" in extra:
+        mx = M.component_mult(r, extra["comp"], COMP_W)
+        r["mz_m"] = M.coverage_mult(r, extra.get("cov"), MZ_W)
+        for c in ("tgt", "rec", "wyd", "wtd"):
+            mx[c] = mx[c] * r.mz_m
+        tough = pd.Series([(o, p) in extra["tough"] for o, p in zip(r.opp, r.position)], index=r.index)
+        t5 = extra["t5"].reindex(r.index).fillna(1.0) ** T5_W
+        t5t = pd.Series([extra["t5team"].get((t, p), 1.0) for t, p in zip(r.team, r.position)], index=r.index) ** T5_TEAM_W
+        r["vs_top5"], r["t5_m"] = tough, np.where(tough, t5 * t5t, 1.0)
+        mx = mx.multiply(r.t5_m, axis=0)
+        r["comp_m"] = mx.mean(axis=1)
+    st = project_stats(r, r.env, r.opp_ratio, pass_m, rush_m, qb_m, snap_m, mx)
+    for ppr, col in ((0, "std"), (0.5, "half"), (1, "ppr")):
+        r[col] = points(st, ppr)
+    cols = ["pyd", "ptd", "int", "car", "ryd", "rtd", "tgt", "rec", "wyd", "wtd"]
+    return r.drop(columns=[c for c in cols if c in r]).join(st[cols])
+
+MATCHUP_KEYS = [("QB", "pass", ("att", "pyd")), ("QB", "rush", ("car", "ryd")), ("RB", "rush", ("car", "ryd")),
+                ("RB", "rec", ("tgt", "wyd")), ("WR", "rec", ("tgt", "wyd")), ("TE", "rec", ("tgt", "wyd"))]
+
+
+def write_matchups(mctx, ids):
+    """output/fantasy_matchups.json for the page: each defense's yards allowed per game to each position on
+    runs and passes (ratio to league average and rank, 1 = fewest allowed), its man-coverage rate, and each
+    pass catcher's man/zone split and every player's split vs top-5 defenses (shown, not used in projections)."""
+    comp = mctx["comp"]
+    defs = {}
+    for pos, kind, (vol, rate) in MATCHUP_KEYS:
+        x = comp.xs(pos, level="position")
+        v = (x[vol] * x[rate]).sort_values()
+        for rank, (team, ratio) in enumerate(v.items(), 1):
+            defs.setdefault(team, {})[f"{pos}_{kind}"] = [rank, round(float(ratio), 3)]
+    dman, lg, cf = mctx["cov"]
+    for team, m in dman.items():
+        if team in defs:
+            defs[team]["man"] = round(float(m), 3)
+    cf = cf[cf.index.isin(ids) & (cf.plays >= 200)]
+    t5 = mctx["t5"][mctx["t5"].index.isin(ids)]
+    out = {"defs": defs, "lg_man": round(float(lg), 3), "cov_seasons": sorted(int(y) for y in mctx.get("cov_seasons", [])),
+           "tough": sorted([list(k) for k in mctx["tough"]]),
+           "mz": {i: [round(float(a), 3), round(float(b), 3)] for i, a, b in zip(cf.index, cf.f_man, cf.f_zone)},
+           "t5": {i: round(float(v), 3) for i, v in t5.items() if abs(v - 1) >= 0.03}}
+    os.makedirs(OUT, exist_ok=True)
+    with open(os.path.join(OUT, "fantasy_matchups.json"), "w") as f:
+        json.dump(out, f, separators=(",", ":"))
+
+def actual_now(d, week):
+    """Games already final in the current week: teams that played and every player's actual points
+    (skill players, kickers, and DST_<TEAM> defenses), written to output/fantasy_actual.json for the page."""
+    s = d["stats"].copy()
+    s = s[(s.season == SEASON) & (s.week == week)]
+    g = d["games"]
+    g = g[(g.season == SEASON) & (g.week == week) & g.home_score.notna()]
+    final = sorted(set(g.home_team) | set(g.away_team))
+    played = sorted(set(final) & set(s.team))        # final games whose box scores nflverse has posted
+    pts = {}
+    if len(s):
+        s = s.join(components(s))
+        k = kicker_points(s) if "fg_made_0_19" in s else 0
+        for ppr, i in ((0, 0), (0.5, 1), (1, 2)):
+            s[f"p{i}"] = points(s, ppr) + k
+        for r in s[s.team.isin(played)].itertuples():
+            pts[r.player_id] = [round(float(r.p0), 2), round(float(r.p1), 2), round(float(r.p2), 2)]
+        tg = team_games(g)
+        for t in dst_games(s.assign(team=s.team), tg).itertuples():
+            v = round(float(t.dst_plays + pa_points(np.array([t.pa]))[0]), 2)
+            pts[f"DST_{t.team}"] = [v, v, v]
+    os.makedirs(OUT, exist_ok=True)
+    with open(os.path.join(OUT, "fantasy_actual.json"), "w") as f:
+        json.dump({"week": int(week), "final": final, "played": played, "pts": pts}, f, separators=(",", ":"))
+
+# ----------------------------------------------------------------------------- backtest
+def prepare(d):
+    s = d["stats"].copy()
+    s["key"] = key(s.season, s.week)
+    s = s.join(components(s))
+    s["half"] = points(s, 0.5)
+    s["std"] = points(s, 0)
+    s["ppr"] = points(s, 1)
+    tg = team_games(d["games"])
+    ctx = engine_context(d, s)
+    ctx["cov"] = M.load_coverage(DATA, YEARS)
+    keys = sorted(k for k in s.key.unique() if k >= key(min(YEARS) + 1, 1))
+    ctx["tough"] = M.top5_flags(s, keys, opponent_factors)
+    return s, tg, ctx
+
+
+def matchup_context(s, ctx, tkey, opp_tab):
+    """Matchup data as of tkey: stat-by-stat defense profiles, man/zone, top-5-defense splits."""
+    tough_now = {(dfn, pos) for pos, x in opp_tab.groupby("position") for dfn in x.nsmallest(5, "opp_ratio").defense}
+    t5, _ = M.top5_factors(s, tkey, ctx["tough"], ew_weights)
+    t5team, _ = M.top5_factors(s, tkey, ctx["tough"], ew_weights, by="team")
+    return dict(comp=M.defense_components(s, tkey, ew_weights), cov=M.coverage_factors(ctx["cov"], s, tkey, SEASON_KEEP),
+                t5=t5, t5team=t5team.to_dict(), tough=tough_now,
+                cov_seasons=ctx["cov"][ctx["cov"].man.notna() & (ctx["cov"].key < tkey)].season.unique())
+
+
+def backtest_absent(r, s, tkey, actual):
+    """Regulars (played one of their team's last two games, 3+ targets/carries a game) who sat out this week."""
+    recent = s[(s.key < tkey) & (s.key >= tkey - 100)]
+    last2 = recent.groupby("team").key.apply(lambda k: sorted(k.unique())[-2:] if len(k) else [])
+    a = r[(r.tgt + r.car >= 3) & ~r.index.isin(actual.index)].copy()
+    a = a[[lk in last2.get(t, []) for lk, t in zip(a.last_key, a.last_team)]]
+    return a.assign(team=a.last_team)
+
+
+def last_complete_week(d):
+    """Latest week of this season with every game final."""
+    g = d["games"][d["games"].season == SEASON]
+    done = g.groupby("week").home_score.apply(lambda x: x.notna().all())
+    return int(done[done].index.max()) if done.any() else 0
+
+
+def write_history(b):
+    """output/fantasy_history.json: what the model projected for each player in each completed week of this
+    season, made with only the data available before that week (walk-forward), as {id: {week: [std, half, ppr]}}.
+    The page sets these against what the player actually scored in each league."""
+    out = {}
+    for r in b.itertuples():
+        out.setdefault(r.Index, {})[int(r.week)] = [round(float(r.std), 1), round(float(r.half), 1), round(float(r.ppr), 1)]
+    os.makedirs(OUT, exist_ok=True)
+    with open(os.path.join(OUT, "fantasy_history.json"), "w") as f:
+        json.dump(out, f, separators=(",", ":"))
+
+
+def backtest(d, prepared=None, quiet=False, weeks=None):
+    s, tg, ctx = prepared or prepare(d)
+    rows = []
+    weeks = weeks or [(2025, w) for w in range(4, 19)] + [(SEASON, w) for w in range(3, last_complete_week(d) + 1)]
+    for season, week in weeks:
+        tkey = key(season, week)
+        lg_rates = league_rates(s, tkey)
+        r = player_rates(s, tkey, lg_rates)
+        base, lg = team_baseline(tg, tkey)
+        opp_tab = opponent_factors(s, tkey)
+        opp_f = opp_tab.set_index(["defense", "position"]).opp_ratio
+        sched = tg[tg.key == tkey].set_index("team")
+        actual = s[s.key == tkey].set_index("player_id")
+        team_of = actual.team.reindex(r.index)           # team he actually played for (we condition on playing)
+        implied = sched.vegas_pts.fillna(base.pf)
+        pass_def, rush_def = defense_now(ctx, sched)
+        extra = dict(qb_now=actual.groupby("team").team_qb.first(), pass_def=pass_def, rush_def=rush_def,
+                     **matchup_context(s, ctx, tkey, opp_tab))
+        rr = r[team_of.notna()].assign(team=team_of.dropna())
+        rr = role_adjust(redistribute(rr, backtest_absent(r, s, tkey, actual)), s, tkey)
+        p = score_players(rr, rr.team, sched, implied, base, opp_f, extra)
+        # naive baselines: season-to-date average and recency-weighted average of actual fantasy points
+        prev = s[(s.key < tkey) & (s.season == season)].groupby("player_id").half.mean()
+        p["naive_season"] = prev.reindex(p.index)
+        h = ew_weights(s[s.position.isin(SKILL)], tkey, "player_id")
+        p["naive_ew"] = (h.w * h.half).groupby(h.player_id).sum() / h.w.groupby(h.player_id).sum()
+        p["actual"] = actual.half.reindex(p.index)
+        p["season"], p["week"] = season, week
+        rows.append(p.dropna(subset=["actual"]))
+    b = pd.concat(rows)
+    if quiet:
+        return b
+    write_history(b[b.season == SEASON])
+    b = b[b.naive_season >= 5]               # fixed sample (independent of the model being tested)
+    print(f"\nBacktest, half-PPR, players averaging 5+ pts this season who played ({len(b)} player-games):")
+    for season in (2025, SEASON):
+        x = b[b.season == season]
+        mae = lambda c: (x[c] - x.actual).abs().mean()
+        cor = lambda c: x[c].corr(x.actual)
+        print(f"  {season}: model MAE {mae('half'):.2f} (r={cor('half'):.3f}) | season avg {mae('naive_season'):.2f} "
+              f"(r={cor('naive_season'):.3f}) | recency avg {mae('naive_ew'):.2f} (r={cor('naive_ew'):.3f})")
+    for pos in SKILL:
+        x = b[b.position == pos]
+        print(f"  {pos}: model {(x.half - x.actual).abs().mean():.2f}  season avg {(x.naive_season - x.actual).abs().mean():.2f}"
+              f"  n={len(x)}")
+    os.makedirs(OUT, exist_ok=True)
+    b[["season", "week", "name", "position", "team", "opp", "half", "naive_season", "actual"]].to_csv(
+        os.path.join(OUT, "fantasy_backtest.csv"))
+    return b
+
+# ----------------------------------------------------------------------------- live projections
+def injury_p(inj, week):
+    i = inj[inj.week == week].copy()
+    has_final = i.report_status.notna().groupby(i.team).transform("any")
+    prac = i.practice_status.fillna("")
+    est = np.where(prac.str.startswith("Did Not"), 0.3, np.where(prac.str.startswith("Limited"), 0.1, 0.0))
+    i["p_out"] = np.where(i.report_status.notna(), i.report_status.map(STATUS_P).fillna(0),
+                          np.where(has_final, 0.0, est))
+    i["status"] = i.report_status.fillna(prac.str.replace(" Participation in Practice", "")
+                                         .str.replace("Did Not Participate In Practice", "DNP")
+                                         .replace({"Full": "", "Limited": "Limited practice"}))
+    return i.drop_duplicates("gsis_id", keep="last").set_index("gsis_id")
+
+
+def live(d, n_weeks=None):
+    s, tg, ctx = prepare(d)
+    g = d["games"]
+    left = g[(g.season == SEASON) & g.home_score.isna()]
+    week = int(left.week.min())
+    weeks = sorted(left.week.unique())
+    eng = pd.read_csv(ENGINE_PRED) if os.path.exists(ENGINE_PRED) else pd.DataFrame()
+    eng_pts = {}
+    for x in eng.itertuples():
+        eng_pts[(x.week, x.home_team)] = x.pred_home_pts
+        eng_pts[(x.week, x.away_team)] = x.pred_away_pts
+
+    roster = d["roster"]
+    # each team's latest weekly roster (a team on bye is missing from the newest week)
+    r_now = roster[roster.week == roster.groupby("team").week.transform("max")]
+    r_now = r_now.sort_values("week").drop_duplicates("gsis_id", keep="last").set_index("gsis_id")
+    inj = injury_p(d["inj"], week)
+    depth = d["depth"]
+    dd = depth[depth.dt == depth.dt.max()]
+    qb_depth = dd[dd.pos_abb == "QB"].sort_values("pos_rank").drop_duplicates(["team", "gsis_id"])
+    qb_depth = qb_depth[[r_now.status.get(gid, "ACT") not in INACTIVE for gid in qb_depth.gsis_id]]
+
+    tkey = key(SEASON, week)
+    lg_rates = league_rates(s, tkey)
+    r = player_rates(s, tkey, lg_rates)
+    # current team and roster status
+    r["team_now"] = r_now.team.replace(TEAM_FIX).reindex(r.index)
+    r["roster_status"] = r_now.status.reindex(r.index)
+    # regulars who will miss games: on IR/released (all weeks) or ruled out/doubtful (this week)
+    last2 = s[s.season == SEASON].groupby("team").key.apply(lambda k: sorted(k.unique())[-2:])
+    regular = (r.tgt + r.car >= 3) & np.array([lk in last2.get(t, []) for lk, t in zip(r.last_key, r.last_team)])
+    inj_out = inj.p_out.reindex(r.index).fillna(0) >= 0.75
+    gone = r.roster_status.isin(INACTIVE) | (r.team_now.notna() & (r.team_now != r.last_team))
+    absent_all = r[regular & gone].assign(team=lambda x: x.last_team)
+    absent_now = r[regular & (gone | inj_out)].assign(team=lambda x: x.last_team)
+    r = r[r.team_now.notna() & ~r.roster_status.isin(INACTIVE) & (r.last_key >= key(SEASON - 1, 1))]
+    r["sleeper_id"] = r_now.sleeper_id.reindex(r.index)
+    r["espn_id"] = r_now.espn_id.reindex(r.index)
+    r["yahoo_id"] = r_now.yahoo_id.reindex(r.index)
+    r["p_out"] = inj.p_out.reindex(r.index).fillna(0)
+    r["status"] = inj.status.reindex(r.index).fillna("")
+    # QBs: only the depth-chart starter keeps passing volume; backups by chance the starter sits
+    qb_share = pd.Series(0.03, index=r.index)
+    for team, q in qb_depth.groupby("team"):
+        ids = list(q.gsis_id)
+        remaining = 1.0
+        for gid in ids:
+            if gid in qb_share.index:
+                p = r.p_out.get(gid, 0.0)
+                qb_share[gid] = max(remaining * (1 - p), 0.03) / max(1 - p, 0.05) if remaining < 1 else 1.0
+                remaining *= p
+    isqb = r.position == "QB"
+    for c in ("att", "car", "fl", "two"):
+        r.loc[isqb, c] = r.loc[isqb, c] * qb_share[isqb]
+    # each team's expected QB rating this week (the engine's ratings, weighted by who is likely to start)
+    qbs = r[isqb].assign(share=qb_share[isqb], rating=[ctx["ratings"].get(i, ctx["rep"]) for i in r[isqb].index])
+    qbs = qbs[qbs.share > 0.03]
+    qb_now = (qbs.share * qbs.rating).groupby(qbs.team_now).sum() / qbs.share.groupby(qbs.team_now).sum()
+    r = r.assign(team=r.team_now)
+    r_now_wk = role_adjust(redistribute(r, absent_now), s, tkey)
+    r_later = role_adjust(redistribute(r.assign(p_out=np.where(r.p_out >= 1, 0.7, 0.0)), absent_all), s, tkey)
+    r_later["p_out"] = r.p_out
+
+    base, lg = team_baseline(tg, tkey)
+    opp_tab = opponent_factors(s, tkey)
+    opp_f = opp_tab.set_index(["defense", "position"]).opp_ratio
+    mctx = matchup_context(s, ctx, tkey, opp_tab)
+    write_matchups(mctx, r.index)
+    ka, da = project_k_dst(s, tg, tkey)
+    k_now = ka[ka.index.isin(r_now.index) & ~r_now.status.reindex(ka.index).isin(INACTIVE)
+               & (ka.last_key >= key(SEASON, 1))].copy()
+    k_now["team"] = r_now.team.replace(TEAM_FIX).reindex(k_now.index)
+
+    out = []
+    for wk in weeks if n_weeks is None else weeks[:n_weeks]:
+        sched = tg[(tg.key == key(SEASON, wk))].set_index("team")
+        eng_imp = pd.Series({t: eng_pts.get((wk, t), np.nan) for t in sched.index})
+        imp = sched.vegas_pts.where(sched.vegas_pts.notna() & (wk == week))
+        # current week: blend Vegas with the engine; later weeks: engine, else team baselines
+        imp = pd.concat([imp, eng_imp], axis=1).mean(axis=1)
+        fallback = (sched.index.map(base.pf).values + sched.opp.map(base.pa).values) / 2
+        imp = imp.fillna(pd.Series(fallback, index=sched.index))
+        pass_def, rush_def = defense_now(ctx, sched, live_week=True)
+        extra = dict(qb_now=qb_now, pass_def=pass_def, rush_def=rush_def, **mctx)
+        rw = r_now_wk if wk == week else r_later
+        p = score_players(rw, rw.team_now, sched, imp, base, opp_f, extra)
+        p["week"] = wk
+        if wk != week:
+            p["p_out"] = np.where(p.p_out >= 1, 0.3, 0.0)   # long-term outs may return; others assumed healthy
+        out.append(p)
+        # kickers
+        kk = k_now[k_now.team.isin(sched.index)].copy()
+        kk["opp"] = kk.team.map(sched.opp)
+        kk["implied"] = kk.team.map(imp)
+        env = (kk.implied / kk.team.map(base.pf)).clip(0.6, 1.6)
+        kk["std"] = kk.rate * env ** 0.6
+        kk["position"], kk["week"] = "K", wk
+        kk["p_out"] = inj.p_out.reindex(kk.index).fillna(0).values if wk == week else 0
+        kk["status"] = inj.status.reindex(kk.index).fillna("").values if wk == week else ""
+        out.append(kk[["name", "team", "opp", "implied", "std", "position", "week", "p_out", "status"]])
+        # defenses
+        dst = pd.DataFrame(index=sched.index)
+        dst["team"] = dst.index
+        dst["opp"] = sched.opp
+        dst["implied"] = sched.opp.map(imp)                  # points the defense is expected to allow
+        opp_env = (dst.implied / sched.opp.map(base.pf)).clip(0.6, 1.6)
+        dst["std"] = da.plays.reindex(dst.index).fillna(da.plays.mean()) / opp_env ** 0.5 + pa_expected(dst.implied.values)
+        dst["name"] = dst.team + " D/ST"
+        dst["position"], dst["week"], dst["p_out"], dst["status"] = "DST", wk, 0.0, ""
+        dst.index = "DST_" + dst.team
+        out.append(dst[["name", "team", "opp", "implied", "std", "position", "week", "p_out", "status"]])
+    allp = pd.concat(out)
+    for c in ("half", "ppr"):
+        allp[c] = allp[c].fillna(allp["std"])
+    for c in ("std", "half", "ppr"):
+        allp[c + "_exp"] = allp[c] * (1 - allp.p_out)
+    allp.index.name = "id"
+    byes = {wk: sorted(set(tg[(tg.season == SEASON)].team) - set(tg[tg.key == key(SEASON, wk)].team)) for wk in weeks}
+    return allp, week, byes
+
+
+# ----------------------------------------------------------------------------- market signals
+ESPN_OWN = ("https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/{season}/segments/0/leaguedefaults/3"
+            "?view=kona_player_info")
+ESPN_TEAMS = {1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN", 8: "DET", 9: "GB", 10: "TEN",
+              11: "IND", 12: "KC", 13: "LV", 14: "LA", 15: "MIA", 16: "MIN", 17: "NE", 18: "NO", 19: "NYG", 20: "NYJ",
+              21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC", 25: "SF", 26: "SEA", 27: "TB", 28: "WAS", 29: "CAR",
+              30: "JAX", 33: "BAL", 34: "HOU"}
+
+
+def market_meta(d):
+    """Per player: % of ESPN leagues rostering him, draft pick and rookie year, roster status.
+    The page uses these so it never suggests dropping a highly rostered player or a recent high draft pick."""
+    roster = d["roster"]
+    r = roster[roster.week == roster.groupby("team").week.transform("max")]
+    r = r[r.position.isin(SKILL + ["K"])].sort_values("week").drop_duplicates("gsis_id", keep="last")
+    own = {}
+    try:
+        flt = json.dumps({"players": {"limit": 1500, "sortPercOwned": {"sortPriority": 1, "sortAsc": False}}})
+        req = urllib.request.Request(ESPN_OWN.format(season=SEASON), headers={"X-Fantasy-Filter": flt,
+                                                                             "User-Agent": "gridiron-fantasy/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            for p in json.load(resp).get("players", []):
+                pl = p.get("player") or {}
+                pct = (pl.get("ownership") or {}).get("percentOwned")
+                if pct is None:
+                    continue
+                if pl.get("defaultPositionId") == 16:
+                    team = ESPN_TEAMS.get(pl.get("proTeamId"))
+                    if team:
+                        own[f"DST_{team}"] = pct
+                else:
+                    own[f"espn:{pl.get('id')}"] = pct
+    except Exception as e:
+        print(f"  could not fetch ESPN roster percentages: {e}")
+    # draft round (players.csv is exact; roster draft_number as fallback) and this season's usage over the last 4 games
+    pl = pd.read_csv(os.path.join(DATA, "players.csv"), usecols=["gsis_id", "pfr_id", "draft_round"], low_memory=False)
+    rnd = pl.dropna(subset=["gsis_id", "draft_round"]).drop_duplicates("gsis_id").set_index("gsis_id").draft_round
+    st = d["stats"]
+    st = st[(st.season == SEASON) & st.position.isin(SKILL)].copy()
+    st["half"] = points(components(st), 0.5)
+    ids = pl.dropna(subset=["pfr_id", "gsis_id"]).drop_duplicates("pfr_id").set_index("pfr_id").gsis_id
+    sn = d["snaps"]
+    sn = sn[sn.season == SEASON].assign(gsis_id=lambda x: x.pfr_player_id.map(ids)).dropna(subset=["gsis_id"])
+    snap_of = dict(zip(zip(sn.gsis_id, sn.game_id), sn.offense_pct))
+    st["snap"] = [snap_of.get(k, np.nan) for k in zip(st.player_id, st.game_id)]
+    last4 = st.sort_values("week").groupby("player_id").tail(4).groupby("player_id")
+    usage = pd.DataFrame({"g": st.groupby("player_id").size(), "ppg": last4.half.mean(), "snap": last4.snap.mean()})
+    meta = {}
+    for x in r.itertuples():
+        m = {"st": x.status}
+        if pd.notna(x.espn_id) and f"espn:{int(x.espn_id)}" in own:
+            m["o"] = round(own[f"espn:{int(x.espn_id)}"], 1)
+        if pd.notna(x.draft_number):
+            m["d"] = int(x.draft_number)
+        if pd.notna(x.rookie_year):
+            m["ry"] = int(x.rookie_year)
+        rd = rnd.get(x.gsis_id)
+        if pd.isna(rd) and "d" in m:
+            rd = 1 if m["d"] <= 32 else 2 if m["d"] <= 64 else 3
+        if pd.notna(rd):
+            m["rd"] = int(rd)
+        if x.gsis_id in usage.index:
+            u = usage.loc[x.gsis_id]
+            m["g"] = int(u.g)
+            m["ppg"] = round(float(u.ppg), 1)
+            if pd.notna(u.snap):
+                m["snap"] = round(float(u.snap), 2)
+        if m.get("o", 0) >= 1 or m.get("rd", 9) <= 2:
+            meta[x.gsis_id] = m
+    for k, v in own.items():
+        if k.startswith("DST_"):
+            meta[k] = {"o": round(v, 1)}
+    return meta
+
+
+def main():
+    args = sys.argv[1:]
+    if "--no-download" not in args:
+        download()
+    d = load()
+    if "backtest" in args:
+        backtest(d)
+        return
+    allp, week, byes = live(d)
+    os.makedirs(OUT, exist_ok=True)
+    allp.round(3).to_csv(os.path.join(OUT, "fantasy_projections.csv"))
+    actual_now(d, week)
+    meta = {"week": week, "season": SEASON, "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
+            "byes": {int(k): v for k, v in byes.items()}}
+    with open(os.path.join(OUT, "fantasy_run.json"), "w") as f:
+        json.dump(meta, f)
+    with open(os.path.join(OUT, "fantasy_meta.json"), "w") as f:
+        json.dump(market_meta(d), f)
+    cur = allp[allp.week == week].sort_values("half_exp", ascending=False)
+    for pos in SKILL + ["K", "DST"]:
+        x = cur[cur.position == pos].head(8)
+        print(f"\n{pos}:\n" + x[["name", "team", "opp", "half", "ppr", "status"]].round(1).to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()

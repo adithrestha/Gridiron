@@ -1,0 +1,138 @@
+{
+ "game": {
+  "final": "CAR 19, GB 27",
+  "pick": "GB",
+  "pick_right": true,
+  "win_prob_gb": 0.701,
+  "pred_score": "CAR 20.3, GB 26.8",
+  "margin_err": -1.5,
+  "total_err": 1.2,
+  "gb_pts_err": -0.2,
+  "car_pts_err": 1.3,
+  "vegas_line_gb": -3.5,
+  "ats_pick": "GB",
+  "ats_right": "True",
+  "brier": 0.089
+ },
+ "kalshi": {
+  "settled": 264,
+  "unsettled": 1,
+  "flagged": 0,
+  "by_kind": {
+   "Player prop": {
+    "n": 191,
+    "lean_right": 64,
+    "brier_model": 0.1333,
+    "brier_kalshi": 0.1225,
+    "pnl_if_1_each": -18.73
+   },
+   "Spread": {
+    "n": 25,
+    "lean_right": 18,
+    "brier_model": 0.0897,
+    "brier_kalshi": 0.108,
+    "pnl_if_1_each": 3.74
+   },
+   "Team total": {
+    "n": 27,
+    "lean_right": 17,
+    "brier_model": 0.0652,
+    "brier_kalshi": 0.0697,
+    "pnl_if_1_each": 1.58
+   },
+   "Total": {
+    "n": 19,
+    "lean_right": 6,
+    "brier_model": 0.1017,
+    "brier_kalshi": 0.0977,
+    "pnl_if_1_each": -2.67
+   },
+   "Winner": {
+    "n": 2,
+    "lean_right": 2,
+    "brier_model": 0.0895,
+    "brier_kalshi": 0.1332,
+    "pnl_if_1_each": 0.68
+   }
+  }
+ },
+ "fantasy": {
+  "players": 12,
+  "mae_half": 4.54,
+  "within_3": 4,
+  "rows": [
+   {
+    "name": "Jordan Love",
+    "half": 19.015,
+    "act_half": 21.52,
+    "err_half": -2.5
+   },
+   {
+    "name": "Bryce Young",
+    "half": 14.942,
+    "act_half": 10.36,
+    "err_half": 4.58
+   },
+   {
+    "name": "Josh Jacobs",
+    "half": 13.681,
+    "act_half": 20.2,
+    "err_half": -6.52
+   },
+   {
+    "name": "Christian Watson",
+    "half": 12.669,
+    "act_half": 13.3,
+    "err_half": -0.63
+   },
+   {
+    "name": "Chuba Hubbard",
+    "half": 12.222,
+    "act_half": 21.4,
+    "err_half": -9.18
+   },
+   {
+    "name": "Matthew Golden",
+    "half": 12.008,
+    "act_half": 17.4,
+    "err_half": -5.39
+   },
+   {
+    "name": "Tetairoa McMillan",
+    "half": 11.026,
+    "act_half": 8.8,
+    "err_half": 2.23
+   },
+   {
+    "name": "Tucker Kraft",
+    "half": 9.785,
+    "act_half": 14.3,
+    "err_half": -4.52
+   },
+   {
+    "name": "Jalen Coker",
+    "half": 8.743,
+    "act_half": 10.6,
+    "err_half": -1.86
+   },
+   {
+    "name": "MarShawn Lloyd",
+    "half": 7.776,
+    "act_half": 2.1,
+    "err_half": 5.68
+   },
+   {
+    "name": "Pierre Strong",
+    "half": 7.725,
+    "act_half": 0.2,
+    "err_half": 7.52
+   },
+   {
+    "name": "Darren Waller",
+    "half": 5.455,
+    "act_half": 1.6,
+    "err_half": 3.86
+   }
+  ]
+ }
+}

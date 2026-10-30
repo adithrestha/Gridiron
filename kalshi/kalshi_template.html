@@ -1,0 +1,330 @@
+<title>Kalshi Edge Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap">
+<style>
+/* Layout: a single trading-desk column. Summary first (best looks), then game-by-game model vs market, then the full ladder table. */
+:root {
+  --bg: #f3f5f1; --surface: #ffffff; --ink: #17211b; --muted: #5b685f; --line: #d9dfd8;
+  --accent: #1d6a85; --yes: #19774a; --no: #a8432c; --warn: #9a6512; --chip: #e7ece6;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1411; --surface: #161d19; --ink: #e4eae5; --muted: #98a69d; --line: #29332d;
+  --accent: #6bb6d1; --yes: #52c48c; --no: #e48067; --warn: #e2b155; --chip: #222b26; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1411; --surface: #161d19; --ink: #e4eae5; --muted: #98a69d; --line: #29332d;
+  --accent: #6bb6d1; --yes: #52c48c; --no: #e48067; --warn: #e2b155; --chip: #222b26; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 36px }
+h1, h2 { font-family: var(--display); font-weight: 700; letter-spacing: .01em; text-wrap: balance; margin: 0; line-height: 1.05 }
+h1 { font-size: clamp(2.1rem, 5vw, 3rem) }
+h2 { font-size: 1.6rem }
+h3 { font-size: 1rem; margin: 0 }
+p { margin: 0 }
+.num, td.n, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums }
+.muted { color: var(--muted) }
+.eyebrow { font: 600 .72rem/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted) }
+header { display: grid; gap: 10px }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: .9rem }
+.caution { border-left: 3px solid var(--warn); padding: 4px 0 4px 16px; display: grid; gap: 6px; max-width: 75ch }
+.caution strong { color: var(--warn) }
+section { display: grid; gap: 14px; min-width: 0 }
+.sechead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px }
+.sechead p { max-width: 70ch }
+
+/* best looks */
+.looks { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden }
+.look { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 4px 14px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line) }
+.look:first-child { border-top: 0 }
+.look .what { min-width: 0 }
+.look .what b { font-weight: 600 }
+.look .why { font-size: .85rem; color: var(--muted) }
+.look .nums { text-align: right; font-family: var(--mono); font-size: .85rem; white-space: nowrap }
+.look .nums .edge { font-weight: 600; color: var(--yes); font-size: 1rem }
+.side { font: 700 .78rem/1 var(--mono); padding: 6px 0; text-align: center; border-radius: 4px; letter-spacing: .04em }
+.side.YES { background: color-mix(in srgb, var(--yes) 16%, transparent); color: var(--yes) }
+.side.NO { background: color-mix(in srgb, var(--no) 16%, transparent); color: var(--no) }
+.empty { padding: 20px 16px; color: var(--muted) }
+.refresh { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px }
+.refresh button { font: 600 .9rem var(--body); padding: 8px 14px; border-radius: 4px; border: 1px solid var(--accent); background: var(--accent); color: var(--bg); cursor: pointer }
+.refresh button[disabled] { opacity: .55; cursor: default }
+.refresh .msg { font-size: .85rem; color: var(--muted); max-width: 60ch }
+.newsnote { font-size: .82rem; color: var(--accent); margin-top: 2px }
+.newsnote a { color: inherit }
+details.left { font-size: .88rem; color: var(--muted) }
+details.left summary { cursor: pointer; font-weight: 600; color: var(--ink) }
+details.left ul { margin: 8px 0 0; padding-left: 20px; columns: 2 280px; column-gap: 24px }
+details.left li { break-inside: avoid; margin-bottom: 4px }
+
+/* games */
+.games { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px }
+.game { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0 }
+.game .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px }
+.game .teams { font: 700 1.35rem/1 var(--display); letter-spacing: .02em }
+.game .when { font-size: .8rem; color: var(--muted); white-space: nowrap }
+.cmp { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 4px 10px; font-size: .85rem; align-items: center }
+.cmp .h { font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted) }
+.cmp .gap { font-family: var(--mono); font-size: .78rem; text-align: right }
+.gap.big { color: var(--warn); font-weight: 600 }
+.bar { height: 6px; background: var(--chip); border-radius: 3px; position: relative; margin-top: 2px }
+.bar i { position: absolute; top: -3px; width: 2px; height: 12px; border-radius: 1px }
+.bar i.m { background: var(--accent) } .bar i.k { background: var(--muted) }
+.game .foot { font-size: .8rem; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap }
+.pill { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--chip); color: var(--muted) }
+.pill.val { background: color-mix(in srgb, var(--yes) 16%, transparent); color: var(--yes) }
+.legend { display: flex; gap: 16px; font-size: .8rem; color: var(--muted); flex-wrap: wrap }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 3px; margin-right: 6px; vertical-align: middle; background: var(--c) }
+
+/* table */
+.filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end }
+.filters label { display: grid; gap: 4px; font-size: .75rem; color: var(--muted); font-weight: 600; letter-spacing: .04em }
+.filters label.chk { display: flex; align-items: center; gap: 6px; font-size: .85rem; letter-spacing: 0; color: var(--ink); font-weight: 400; padding-bottom: 6px }
+select, input[type=search] { font: inherit; font-size: .9rem; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); min-width: 0 }
+input[type=search] { width: 220px; max-width: 100% }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; min-width: 860px }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap }
+th { font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--surface); cursor: pointer; user-select: none }
+th[aria-sort] { color: var(--ink) }
+td.n, th.n { text-align: right }
+td.lbl { white-space: normal; min-width: 220px }
+tr.value td:first-child { box-shadow: inset 3px 0 var(--yes) }
+.pos { color: var(--yes) } .neg { color: var(--muted) }
+.inj { color: var(--warn); font-size: .75rem; font-weight: 700; margin-left: 6px }
+.more { justify-self: start; font: 600 .9rem var(--body); padding: 8px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); cursor: pointer }
+.how { display: grid; gap: 10px; max-width: 75ch }
+.how ul { margin: 0; padding-left: 20px; display: grid; gap: 6px }
+@media (max-width: 560px) {
+  .look { grid-template-columns: 46px minmax(0, 1fr) }
+  .look .nums { grid-column: 2; text-align: left }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">NFL · Kalshi vs our model</span>
+    <h1>Kalshi Edge Board</h1>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <div class="caution">
+    <p><strong>Read this first.</strong> Our game model is about as accurate as Vegas, not better: against the spread it went 51–53% in backtests, under the 52.4% needed to profit at standard odds. Kalshi's game prices track Vegas closely, so a big gap between the model and Kalshi usually means the model is missing news (an injury, a role change, a depth-chart move).</p>
+    <p>To account for that, every probability here is pulled most of the way back toward Kalshi's price before it's compared, and a market is only flagged when it still clears the price plus Kalshi's fee. The player-prop math is newer and hasn't been tested against real prop results. Treat flags as places to look closer, not bets the numbers have proven.</p>
+  </div>
+
+  <section>
+    <div class="sechead">
+      <h2>Model's best looks</h2>
+      <p class="muted" id="looksnote"></p>
+    </div>
+    <div class="refresh"><button type="button" id="refreshBtn">Refresh prices and news</button><span class="msg" id="refreshMsg"></span></div>
+    <div class="looks" id="looks"></div>
+    <details class="left" id="leftout"><summary></summary><ul></ul></details>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <h2>Games: model vs market</h2>
+      <div class="legend"><span style="--c:var(--accent)">Our model</span><span style="--c:var(--muted)">Kalshi</span></div>
+    </div>
+    <div class="filters"><label>Week <select id="gweek"></select></label></div>
+    <div class="games" id="games"></div>
+  </section>
+
+  <section>
+    <div class="sechead">
+      <h2>Every market</h2>
+      <p class="muted">Sorted by edge after shrinking and fees. Click a column to sort.</p>
+    </div>
+    <div class="filters">
+      <label>Week <select id="fweek"></select></label>
+      <label>Market <select id="fkind"></select></label>
+      <label>Search <input type="search" id="fq" placeholder="Player, team, game"></label>
+      <label class="chk"><input type="checkbox" id="fbest" checked> Best line per prop</label>
+      <label class="chk"><input type="checkbox" id="fval"> Flagged only</label>
+    </div>
+    <div class="tablebox"><table>
+      <thead><tr id="thead"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+    <button class="more" id="more" type="button">Show more</button>
+  </section>
+
+  <section class="how">
+    <h2>How the numbers are made</h2>
+    <ul id="howlist"></ul>
+  </section>
+</div>
+
+<script>
+const D = /*__DATA__*/null;
+const $ = id => document.getElementById(id);
+const pct = (p, d = 0) => p == null ? "–" : (100 * p).toFixed(d) + "%";
+const cents = p => p == null ? "–" : Math.round(100 * p) + "¢";
+const sgn = (x, d = 1) => x == null ? "–" : +x.toFixed(d) === 0 ? (0).toFixed(d) : (x > 0 ? "+" : "−") + Math.abs(x).toFixed(d);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtTime = iso => { try { return new Date(iso.replace(/Z?$/, "Z")).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) } catch (e) { return iso } };
+// nflverse kickoff times are US Eastern; DST runs from the 2nd Sunday of March to the 1st Sunday of November
+const etOffset = day => { const [y, m, d] = day.split("-").map(Number); const sun = (mo, n) => { const f = new Date(Date.UTC(y, mo, 1)).getUTCDay(); return 1 + (7 - f) % 7 + 7 * (n - 1) };
+  const dst = (m > 3 && m < 11) || (m === 3 && d >= sun(2, 2)) || (m === 11 && d < sun(10, 1)); return dst ? "-04:00" : "-05:00" };
+const kickoff = (day, t) => { try { return new Date(day + "T" + t + ":00" + etOffset(day)).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) } catch (e) { return day } };
+const S = D.settings;
+const weeks = [...new Set(D.games.map(g => g.week))].sort((a, b) => a - b);
+const curWeek = weeks[0];
+
+$("meta").innerHTML = [
+  `Kalshi prices fetched <b class="num">${esc(fmtTime(D.fetched_at))}</b>`,
+  `Game model trained through ${esc(D.engine_run.trained_through)}`,
+  `Player projections built ${esc(fmtTime(D.fantasy_run.built_at))}`,
+  `${D.rows.length.toLocaleString()} markets matched`
+].map(s => `<span>${s}</span>`).join("");
+
+// prop key = one row per player+stat or game+market type+team, keeping the best-edge line
+const propKey = r => r.kind === "Player prop" ? `${r.game}|${r.player}|${r.stat}` : `${r.game}|${r.kind}|${r.kind === "Winner" ? "" : r.label.split(" ")[0]}`;
+function bestPerProp(rows) {
+  const m = new Map();
+  for (const r of rows) { const k = propKey(r); const b = m.get(k); if (!b || r.edge > b.edge) m.set(k, r) }
+  return [...m.values()];
+}
+
+// ---------- best looks ----------
+(function () {
+  const flagged = bestPerProp(D.rows.filter(r => r.value)).sort((a, b) => b.edge - a.edge);
+  $("looksnote").textContent = flagged.length
+    ? `${flagged.length} flagged, best line per prop. Stake column is a quarter-Kelly share of your betting bankroll.`
+    : "";
+  if (!flagged.length) {
+    $("looks").innerHTML = `<p class="empty">Nothing clears the bar right now. After shrinking toward Kalshi's prices, no market beats its price plus fee by ${Math.round(S.min_edge * 100)}¢. That's the expected result most days for a model at Vegas level.</p>`;
+    return;
+  }
+  $("looks").innerHTML = flagged.slice(0, 25).map(r => {
+    const proj = r.kind === "Player prop" ? ` · projects ${r.proj} ${esc(r.stat)}` : "";
+    const gap = Math.abs(r.p_side - (r.side === "YES" ? r.mid : 1 - r.mid)) >= 0.25
+      ? ` <span class="inj">Big gap, check news first</span>` : "";
+    return `<div class="look">
+      <div class="side ${r.side}">${r.side}</div>
+      <div class="what"><b>${esc(r.label)}</b> <span class="muted">· ${esc(r.game)} · wk ${r.week}</span>${gap}
+        <div class="why">Buy ${r.side} at ${cents(r.buy_at)}. Model says ${pct(r.p_side)}, ${pct(r.p_adj)} after shrinking toward Kalshi${proj}.</div>
+        ${r.news ? `<div class="newsnote">News: ${esc(r.news)}${r.news_url ? ` <a href="${esc(r.news_url)}" target="_blank" rel="noopener">source</a>` : ""}</div>` : ""}</div>
+      <div class="nums"><div class="edge">${sgn(100 * r.edge, 1)}¢</div><div class="muted">stake ${pct(r.kelly, 1)}</div></div>
+    </div>`;
+  }).join("");
+})();
+
+// ---------- left out + refresh ----------
+(function () {
+  const ex = D.excluded || [];
+  const det = $("leftout");
+  if (!ex.length) { det.hidden = true; return; }
+  det.querySelector("summary").textContent = `${ex.length} players left out (new or shifting role, or news)`;
+  det.querySelector("ul").innerHTML = ex.map(x => `<li><b>${esc(x.player)}</b>: ${esc(x.why)}</li>`).join("");
+})();
+$("refreshMsg").textContent = D.news_checked_at ? `News last checked ${fmtTime(D.news_checked_at)}.` : "News hasn't been checked yet.";
+$("refreshBtn").onclick = async () => {
+  const btn = $("refreshBtn"), msg = $("refreshMsg");
+  btn.disabled = true;
+  try {
+    const c = window.claude && window.claude.use ? await window.claude.use("comments") : null;
+    const can = c ? await c.canSendToClaude() : "off";
+    if (can !== "available") {
+      msg.textContent = can === "writers_only" ? "Only editors of this page can ask for a refresh. Prices update automatically at about 8, 12 and 4 ET on game days."
+        : "Claude can't be reached from here right now. Prices update automatically at about 8, 12 and 4 ET on game days.";
+      btn.disabled = false; return;
+    }
+    const anchor = await c.anchorFor($("refreshBtn"));
+    await c.sendToClaude({ anchor, text: "Refresh the Kalshi betting board now: pull new prices and scan current news for the flagged players." });
+    msg.textContent = "Refresh requested. Claude is pulling prices and checking news; the page updates in about 5 minutes.";
+  } catch (e) {
+    msg.textContent = "The refresh request didn't go through. Try again in a minute.";
+    btn.disabled = false;
+  }
+};
+
+// ---------- games ----------
+function bar(m, k, lo, hi) {
+  const x = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
+  return `<div class="bar">${k == null ? "" : `<i class="k" style="left:${x(k)}%"></i>`}<i class="m" style="left:${x(m)}%"></i></div>`;
+}
+function renderGames() {
+  const wk = +$("gweek").value;
+  const gs = D.games.filter(g => g.week === wk);
+  $("games").innerHTML = gs.map(g => {
+    const dw = g.k_home == null ? null : g.m_home - g.k_home;
+    const dm = g.k_margin == null ? null : g.m_margin - g.k_margin;
+    const dt = g.k_total == null ? null : g.m_total - g.k_total;
+    const fav = g.m_home >= 0.5 ? g.home : g.away;
+    return `<article class="game">
+      <div class="top"><span class="teams">${esc(g.away)} @ ${esc(g.home)}</span><span class="when">${esc(kickoff(g.gameday, g.gametime))}</span></div>
+      <div class="cmp">
+        <span class="h"></span><span class="h">Model</span><span class="h">Kalshi</span><span class="h" style="text-align:right">Gap</span>
+        <span>${esc(g.home)} win</span><span class="num">${pct(g.m_home)}</span><span class="num">${pct(g.k_home)}</span><span class="gap ${Math.abs(dw) >= .08 ? "big" : ""}">${dw == null ? "–" : sgn(100 * dw, 0)}</span>
+        <span>${esc(g.home)} margin</span><span class="num">${sgn(g.m_margin)}</span><span class="num">${sgn(g.k_margin)}</span><span class="gap ${Math.abs(dm) >= 3 ? "big" : ""}">${sgn(dm)}</span>
+        <span>Total pts</span><span class="num">${g.m_total.toFixed(1)}</span><span class="num">${g.k_total == null ? "–" : g.k_total.toFixed(1)}</span><span class="gap ${Math.abs(dt) >= 3 ? "big" : ""}">${sgn(dt)}</span>
+      </div>
+      ${bar(g.m_home, g.k_home, 0, 1)}
+      <div class="foot"><span>${esc(g.away_qb)} vs ${esc(g.home_qb)}</span>
+        <span class="pill ${g.n_value ? "val" : ""}">${g.n_value ? g.n_value + " flagged" : g.n_markets + " markets"}</span></div>
+    </article>`;
+  }).join("") || `<p class="empty">No Kalshi game markets for this week yet.</p>`;
+}
+$("gweek").innerHTML = weeks.map(w => `<option value="${w}">Week ${w}</option>`).join("");
+$("gweek").onchange = renderGames;
+renderGames();
+
+// ---------- table ----------
+const COLS = [
+  ["label", "Market"], ["game", "Game"], ["kind", "Type"], ["side", "Side"],
+  ["buy_at", "Buy at", "n", r => cents(r.buy_at)], ["book_spread", "Bid/ask gap", "n", r => cents(r.book_spread)],
+  ["p_side", "Model", "n", r => pct(r.p_side)], ["p_adj", "Shrunk", "n", r => pct(r.p_adj)],
+  ["edge", "Edge", "n", r => `<span class="${r.edge > 0 ? "pos" : "neg"}">${sgn(100 * r.edge, 1)}¢</span>`],
+  ["kelly", "Stake", "n", r => r.kelly > 0 ? pct(r.kelly, 1) : "–"], ["volume", "Volume", "n", r => Math.round(r.volume).toLocaleString()]
+];
+let sortKey = "edge", sortDir = -1, shown = 100;
+$("thead").innerHTML = COLS.map(([k, t, c]) => `<th class="${c || ""}" data-k="${k}" scope="col">${t}</th>`).join("");
+$("thead").onclick = e => {
+  const k = e.target.closest("th")?.dataset.k; if (!k) return;
+  sortDir = k === sortKey ? -sortDir : (["label", "game", "kind", "side"].includes(k) ? 1 : -1); sortKey = k; renderTable();
+};
+$("fweek").innerHTML = `<option value="">All</option>` + weeks.map(w => `<option value="${w}" ${w === curWeek ? "selected" : ""}>Week ${w}</option>`).join("");
+const kinds = ["Winner", "Spread", "Total", "Team total", "Player prop"];
+$("fkind").innerHTML = `<option value="">All</option>` + kinds.map(k => `<option>${k}</option>`).join("");
+for (const id of ["fweek", "fkind", "fq", "fbest", "fval"]) $(id).addEventListener("input", () => { shown = 100; renderTable() });
+$("more").onclick = () => { shown += 200; renderTable() };
+
+function renderTable() {
+  const wk = $("fweek").value, kind = $("fkind").value, q = $("fq").value.trim().toLowerCase();
+  let rows = D.rows.filter(r => (!wk || r.week === +wk) && (!kind || r.kind === kind) && (!$("fval").checked || r.value)
+    && (!q || (r.label + " " + r.game).toLowerCase().includes(q)));
+  if ($("fbest").checked) rows = bestPerProp(rows);
+  rows.sort((a, b) => { const x = a[sortKey], y = b[sortKey]; return (x > y ? 1 : x < y ? -1 : 0) * sortDir });
+  for (const th of $("thead").children) th.toggleAttribute("aria-sort", th.dataset.k === sortKey);
+  $("tbody").innerHTML = rows.slice(0, shown).map(r => `<tr class="${r.value ? "value" : ""}">${COLS.map(([k, , c, f]) =>
+    `<td class="${k === "label" ? "lbl" : c || ""}">${f ? f(r) : k === "side" ? `<span class="side ${r.side}" style="display:inline-block;width:40px">${r.side}</span>`
+      : esc(r[k]) + (k === "label" && r.injury ? `<span class="inj">${esc(r.status || "injury risk")}</span>` : "")}</td>`).join("")}</tr>`).join("")
+    || `<tr><td colspan="${COLS.length}" class="muted">No markets match these filters.</td></tr>`;
+  $("more").hidden = rows.length <= shown;
+}
+renderTable();
+
+$("howlist").innerHTML = [
+  `Prices come from Kalshi's public market data (read-only, no account). "Buy at" is the current ask for the side shown, so it's what you'd actually pay right now, before any order-book movement.`,
+  `Game markets use our engine's win probability, predicted margin and total. Spreads and totals assume outcomes spread around the prediction like NFL results do around closing lines: standard deviations of ${S.sd_margin} points for margin, ${S.sd_total} for totals, and ${S.sd_team} for one team's points (2018–2025).`,
+  `Player props use the Gridiron fantasy projections (yards, receptions and TDs if the player plays). Yardage and reception chances use how actual games scatter around a player's expected output in 2023–2025. Touchdowns use a Poisson count. Kalshi settles player props at the pre-game price when a player is active but never plays, so these are chances given that the player plays. Players with ${pct(S.max_p_out)} or more chance of missing the game are never flagged.`,
+  `Shrinking: the model keeps ${pct(S.trust.Winner)} of its disagreement with Kalshi's midpoint on game markets and ${pct(S.trust["Player prop"])} on player props. These weights are a judgment call based on the model's Vegas-level record, not something fit to data.`,
+  `Edge = shrunk chance − price − Kalshi's taker fee (7% × price × (1 − price), rounded up to the cent). A market is flagged at ${Math.round(S.min_edge * 100)}¢ or more of edge, a bid/ask gap of ${Math.round(S.max_spread * 100)}¢ or less, and a price between 10¢ and 90¢.`,
+  `Stake is a quarter of the Kelly fraction on the shrunk chance, as a share of the money you've set aside for betting. Full Kelly assumes the probability is right, which these aren't proven to be.`,
+  `Props are left out for players whose role is new or shifting, since the projections lag those changes: fewer than 3 games with a touch this season, under 3 carries plus targets a game, a recent snap share ${Math.round(100 * 0.15)} points or more off the long-run share, or a last game with at least double or at most half the usual carries plus targets.`,
+  `News: the refresh button (and each scheduled refresh) has Claude search current injury and depth-chart news for every flagged player. A player whose gap is explained by news, like a starter ruled out or a demotion, is left out; anything else found is shown under the pick.`,
+  `${D.unmatched} player markets couldn't be matched to a projection (usually name spellings) and are left out.`
+].map(s => `<li>${s}</li>`).join("");
+</script>
