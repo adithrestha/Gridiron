@@ -24,3 +24,6 @@ mkdir -p "$SRC/output" "$SRC/models"
 cp output/* "$SRC/output/"
 [ "$MODE" = train ] && cp models/model.joblib "$SRC/models/model.joblib"
 cat output/run.json; echo
+
+# weekly accuracy report: keep the last pre-kickoff copy of these outputs (never fails the refresh)
+python3 /mnt/project-files/reports/snapshot.py engine || true

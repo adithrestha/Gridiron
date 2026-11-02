@@ -14,7 +14,8 @@ Read-only Kalshi market data only. Never touch trading/account endpoints, never 
    `{"checked_at": "<UTC ISO, minute>", "players": {"Name (TEAM)": {"action": "exclude"|"keep", "note": "...", "source": "<url>"}}}`
    (keys match the `player` name + nflverse team code, e.g. "MarShawn Lloyd (GB)"). Keep earlier entries for players whose news still applies; drop stale ones.
    Re-run so the notes apply and newly surfaced flags get checked too (repeat step 2 for any new flagged player, at most twice):
-   `K=/mnt/project-files/kalshi; python $K/kalshi_edges.py $K/output/kalshi_markets.json /tmp/kalshi_work/data $K/output/kalshi_edges.json && python $K/build_kalshi_page.py $K/output/kalshi_edges.json $K/output/kalshi.html && python /mnt/project-files/fantasy/build_fantasy_page.py`
+   `K=/mnt/project-files/kalshi; python $K/kalshi_edges.py $K/output/kalshi_markets.json /tmp/kalshi_work/data $K/output/kalshi_edges.json && python $K/build_kalshi_page.py $K/output/kalshi_edges.json $K/output/kalshi.html && python /mnt/project-files/fantasy/build_fantasy_page.py && python3 /mnt/project-files/reports/snapshot.py kalshi`
+   (the last command saves the pre-kickoff board for the weekly accuracy report; keep it)
 3. Copy `fantasy/output/fantasy.html` to the scratchpad and republish to https://claude.ai/artifact/GoQ8AvGrxxGbGTdqrYhFdq
    (Gridiron; pass `url`, omit `capabilities` so they carry forward; read first if asked). The standalone Kalshi Edge Board
    (https://claude.ai/artifact/73ioBVCWcqVrKBzm3K6DPQ) is deprecated as of 2026-10-30 (Adit): do NOT republish it. `kalshi.html` is still built but unused.

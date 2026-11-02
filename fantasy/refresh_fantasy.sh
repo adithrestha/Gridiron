@@ -14,3 +14,6 @@ python3 -u fantasy.py --no-download
 python3 build_fantasy_page.py
 mkdir -p "$SRC/output"
 cp output/fantasy_projections.csv output/fantasy_run.json output/fantasy_meta.json output/fantasy_matchups.json output/fantasy_history.json output/fantasy_actual.json output/fantasy_backtest.csv output/fantasy.html "$SRC/output/"
+
+# weekly accuracy report: keep the last pre-kickoff copy of these outputs (never fails the refresh)
+python3 /mnt/project-files/reports/snapshot.py fantasy || true

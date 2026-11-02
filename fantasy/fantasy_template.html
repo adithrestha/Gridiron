@@ -145,7 +145,8 @@ ol.method{padding-left:1.3em}
 .signup{background:var(--accent-soft);border:1px solid var(--line);border-radius:8px;padding:14px;display:grid;gap:6px}
 /* betting tab */
 .tabs{max-width:100%;overflow-x:auto;scrollbar-width:none}
-@media (max-width:480px){.tabs a{padding:6px 8px;font-size:1rem}}
+@media (max-width:480px){.tabs a{padding:6px 6px;font-size:.9rem;letter-spacing:.03em}}
+.tabs{min-width:0}
 .bt-caution{border-left:3px solid var(--warn);padding:4px 0 4px 14px;display:grid;gap:6px;max-width:72ch;font-size:.92rem}
 .bt-caution b{color:var(--warn)}
 .bt-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
@@ -194,13 +195,18 @@ details.bt-left li{break-inside:avoid;margin-bottom:4px}
 #betTable tr.value td:first-child{box-shadow:inset 3px 0 var(--accent)}
 .bt-pos{color:var(--accent)}
 @media (max-width:560px){.bt-look{grid-template-columns:44px minmax(0,1fr)}.bt-look .nums{grid-column:2;text-align:left}}
+.rp-vs{font:500 .8rem var(--mono);color:var(--muted)}
+.rp-ok{color:var(--accent)}.rp-bad{color:var(--neg)}
+.rp-sec{display:grid;gap:14px}
+.rp-note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px}
+.rp-note p{margin:0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
 <div class="wrap">
   <header style="display:grid;gap:12px">
     <div class="topbar">
-      <nav class="tabs" aria-label="Sections"><a href="#intro" data-tab="intro">Start here</a><a href="#predictions" data-tab="predictions">Predictions</a><a href="#fantasy" data-tab="fantasy">Fantasy</a><a href="#betting" data-tab="betting">Betting</a></nav>
+      <nav class="tabs" aria-label="Sections"><a href="#intro" data-tab="intro">Start here</a><a href="#predictions" data-tab="predictions">Predictions</a><a href="#fantasy" data-tab="fantasy">Fantasy</a><a href="#betting" data-tab="betting">Betting</a><a href="#report" data-tab="report">Report</a></nav>
       <span class="who" id="who"></span>
     </div>
     <span class="label" id="eyebrow"></span>
@@ -325,6 +331,27 @@ details.bt-left li{break-inside:avoid;margin-bottom:4px}
       <h2>How it backtests</h2>
       <p class="note">Each period was predicted by a model trained only on earlier seasons. Against the spread (ATS) needs 52.4% to break even at standard −110 odds.</p>
       <div class="tablewrap"><table id="back"></table></div>
+    </section>
+  </div>
+
+  <!-- ======================================================= REPORT (weekly accuracy; built by /mnt/project-files/reports) -->
+  <div id="rep" hidden style="display:grid;gap:28px">
+    <p class="note" id="repEmpty" hidden>The first report runs the Tuesday morning after Monday Night Football.</p>
+    <nav class="weeks" id="repWeeks" aria-label="Week"></nav>
+    <div class="rp-note" id="repNote" hidden></div>
+    <section class="rp-sec" id="repGames"></section>
+    <section class="rp-sec" id="repFant"></section>
+    <section class="rp-sec" id="repBet"></section>
+    <section class="rp-sec" id="repTrend"></section>
+    <section>
+      <h2>How grading works</h2>
+      <ul class="method">
+        <li><b>Graded against what was published.</b> Every refresh saves a copy of the picks, fantasy projections and Kalshi board for games that haven't kicked off. The last copy before each kickoff is the one graded. Week 8 was rebuilt from the copies that survived (the engine's Thursday run, the Friday fantasy and Kalshi boards, and Monday's for the night game).</li>
+        <li><b>Game picks</b> are compared with the Vegas favorite and with Vegas win chances from the closing moneylines. Brier score is the average squared miss on the win chance; lower is better, and a coin flip scores 0.25.</li>
+        <li><b>Fantasy</b> grades every player projected at least 5 half-PPR points (kickers and defenses aren't graded). A player who didn't play counts as 0. The comparison guess is each player's season average before that week.</li>
+        <li><b>Betting</b> settles every saved Kalshi market from Kalshi's own result. "Model" is the chance shown on the Betting tab (after pulling toward Kalshi); "Kalshi" is the market's mid price. Value bets and top picks are scored as one contract each, bought at the ask plus Kalshi's fee.</li>
+        <li><b>One week is noisy.</b> A 16-game week can swing 15 points of accuracy by luck alone; trust the season-to-date numbers more.</li>
+      </ul>
     </section>
   </div>
 
@@ -1083,23 +1110,96 @@ function renderBet(){
 }
 renderBet();
 
+// ---------------------------------------------------------------- report
+const RP = D.rep || null;
+let repW = null;
+function renderReport(){
+  if (!RP || !Object.keys(RP.weeks || {}).length) { $("#repEmpty").hidden = false; ["#repGames","#repFant","#repBet","#repTrend"].forEach(k => $(k).hidden = true); return; }
+  const wks = Object.keys(RP.weeks).map(Number).sort((a, b) => a - b);
+  if (repW === null) repW = wks[wks.length - 1];
+  const P = x => x == null ? "–" : Math.round(100 * x) + "%";
+  const N = (x, d = 1) => x == null ? "–" : (+x).toFixed(d);
+  const S = x => x == null ? "–" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2);
+  const rec = (w, n) => `${w}–${n - w}`;
+  const fact = (v, l, vs) => `<div class="fact"><span class="v">${v}</span><span class="label">${l}</span>${vs ? `<span class="rp-vs">${vs}</span>` : ""}</div>`;
+  const mark = b => b == null ? `<span class="muted">push</span>` : b ? `<span class="rp-ok">✓</span>` : `<span class="rp-bad">✗</span>`;
+  const better = (a, b, low) => a == null || b == null ? "" : (low ? a < b : a > b) ? "rp-ok" : a === b ? "" : "rp-bad";
+  $("#repWeeks").innerHTML = wks.map(w => `<button type="button" data-rw="${w}" aria-pressed="${repW === w}">Week ${w}</button>`).join("")
+    + `<button type="button" data-rw="season" aria-pressed="${repW === "season"}">Season to date</button>`;
+  document.querySelectorAll("[data-rw]").forEach(b => b.onclick = () => { repW = b.dataset.rw === "season" ? "season" : +b.dataset.rw; renderReport(); });
+  const season = repW === "season";
+  const W = season ? RP.season_to_date : RP.weeks[repW];
+  const st = season ? {} : (W.status || {}), cov = season ? {} : (W.coverage || {});
+  const note = season ? null : (RP.notes || {})[String(repW)];
+  $("#repNote").hidden = !note; if (note) $("#repNote").innerHTML = `<p>${esc(note)}</p>`;
+  const covTxt = c => c && c.median_hours_before != null ? `Graded against the copy published a median ${N(c.median_hours_before, 0)} hours before kickoff.` : "";
+  const scope = season ? `Live weeks ${RP.season_to_date.weeks.join(", ")}.` : "";
+
+  // games
+  const g = W.games;
+  $("#repGames").innerHTML = `<h2>Game picks</h2>` + (g ? `<p class="note">${scope} ${covTxt(cov.games)}</p>
+    <div class="facts">${fact(rec(g.correct, g.games), "winners picked right", `Vegas favorite ${rec(g.vegas_correct, g.vegas_games)}`)}
+      ${fact(`<span class="${better(g.brier, g.vegas_brier, 1)}">${N(g.brier, 3)}</span>`, "Brier score (lower is better)", `Vegas ${N(g.vegas_brier, 3)}`)}
+      ${fact(rec(g.ats_w, g.ats_n), "against the spread", "52.4% breaks even")}
+      ${fact(rec(g.ou_w, g.ou_n), "over/under calls")}
+      ${fact(N(g.margin_mae) + " pts", "average miss on margin", `Vegas line ${N(g.vegas_margin_mae)}`)}</div>`
+    + (!season && W.game_rows.length ? `<div class="tablewrap"><table><thead><tr><th class="l">Game</th><th class="l">Pick</th><th>Chance</th><th class="l">Predicted</th><th class="l">Final</th><th>Winner</th><th>Vegas fav</th><th class="l">Spread pick</th><th></th><th class="l">Total pick</th><th></th></tr></thead><tbody>${
+      W.game_rows.map(x => `<tr><td class="l">${esc(x.game)}</td><td class="l"><b>${esc(x.pick)}</b></td><td class="num">${P(x.prob)}</td><td class="l num">${esc(x.pred)}</td><td class="l num">${esc(x.final)}</td><td>${mark(x.correct)}</td><td>${mark(x.vegas_correct)}</td><td class="l">${esc(x.ats)}</td><td>${mark(x.ats_right)}</td><td class="l">${esc(x.ou)}</td><td>${mark(x.ou_right)}</td></tr>`).join("")}</tbody></table></div>` : "")
+    : `<p class="note">${esc(st.games || "Not graded.")}</p>`);
+
+  // fantasy
+  const f = W.fantasy, fr = season ? null : W.fantasy_rows;
+  const ptab = rows => `<div class="tablewrap"><table><thead><tr><th class="l">Player</th><th>Pos</th><th>Team</th><th>Proj</th><th>Scored</th><th title="Projection minus actual">Proj − actual</th></tr></thead><tbody>${
+    rows.map(x => `<tr><td class="l">${esc(x.name)}${x.played ? "" : ` <span class="muted">(didn't play)</span>`}</td><td>${x.pos}</td><td>${x.team}</td><td class="num">${N(x.proj)}</td><td class="num">${N(x.act)}</td><td class="num ${Math.abs(x.err) >= 8 ? "dn" : ""}">${x.err > 0 ? "+" : ""}${N(x.err)}</td></tr>`).join("")}</tbody></table></div>`;
+  $("#repFant").innerHTML = `<h2>Fantasy projections</h2>` + (f ? `<p class="note">${scope} ${covTxt(cov.fantasy)} Half PPR, players projected ${RP.fmin}+ points.</p>
+    <div class="facts">${fact(`<span class="${better(f.model_mae_same, f.naive_mae, 1)}">${N(f.mae_half, 2)}</span>`, "average miss, points", `season-average guess ${N(f.naive_mae, 2)}`)}
+      ${fact(S(f.bias_half), "average projection minus actual", f.bias_half > 0 ? "projected too high" : "projected too low")}
+      ${fact(P(f.within5), "within 5 points")}
+      ${fact(N(f.corr, 2), "correlation with actual")}
+      ${fact(String(f.players), "players graded", `${f.dnp} didn't play`)}</div>
+    <div class="tablewrap"><table><thead><tr><th class="l">Position</th><th>Players</th><th>Avg miss</th><th>Bias</th></tr></thead><tbody>${
+      Object.entries(f.by_pos).map(([p, x]) => `<tr><td class="l">${p}</td><td class="num">${x.n}</td><td class="num">${N(x.mae, 2)}</td><td class="num">${S(x.bias)}</td></tr>`).join("")}</tbody></table></div>`
+    + (fr ? `<h3>Top 25 projected</h3>${ptab(fr.top)}<h3>Biggest misses</h3><div class="two"><div><p class="note">Scored more than projected</p>${ptab(fr.over)}</div><div><p class="note">Scored less than projected</p>${ptab(fr.under)}</div></div>` : "")
+    : `<p class="note">${esc(st.fantasy || "Not graded.")}</p>`);
+
+  // betting
+  const k = W.kalshi;
+  const bets = (b, l) => fact(b.n ? `<span class="${b.profit >= 0 ? "rp-ok" : "rp-bad"}">${b.profit >= 0 ? "+" : "−"}$${Math.abs(b.profit).toFixed(2)}</span>` : "–", l, b.n ? `${rec(b.won, b.n)}, ${b.roi >= 0 ? "+" : ""}${Math.round(100 * b.roi)}% on $${N(b.cost, 2)}` : "none flagged");
+  $("#repBet").innerHTML = `<h2>Betting (Kalshi)</h2>` + (k ? `<p class="note">${scope} ${covTxt(cov.kalshi)} ${k.markets.toLocaleString()} settled markets.</p>
+    <div class="facts">${fact(`<span class="${better(k.brier_shown, k.brier_kalshi, 1)}">${N(k.brier_shown, 4)}</span>`, "model Brier (lower is better)", `Kalshi price ${N(k.brier_kalshi, 4)}`)}
+      ${bets(k.value_bets, "value bets, 1 contract each")}${bets(k.top_picks, "top picks, 1 contract each")}
+      ${fact(P(k.lean_right), "model's side won", "across every market")}</div>
+    <div class="tablewrap"><table><thead><tr><th class="l">Market</th><th>Markets</th><th>Model Brier</th><th>Kalshi Brier</th><th>Model's side won</th></tr></thead><tbody>${
+      Object.entries(k.by_kind).map(([n, x]) => `<tr><td class="l">${n}</td><td class="num">${x.n.toLocaleString()}</td><td class="num ${better(x.brier_shown, x.brier_kalshi, 1) === "rp-ok" ? "up" : "dn"}">${N(x.brier_shown, 4)}</td><td class="num">${N(x.brier_kalshi, 4)}</td><td class="num">${P(x.lean_right)}</td></tr>`).join("")}</tbody></table></div>`
+    + (!season && W.kalshi_rows.length ? `<h3>Value bets and top picks</h3><div class="tablewrap"><table><thead><tr><th class="l">Market</th><th class="l">Game</th><th>Side</th><th>Price</th><th>Model</th><th></th><th>Result</th><th>Profit</th></tr></thead><tbody>${
+      W.kalshi_rows.map(x => `<tr><td class="l">${esc(x.label)}</td><td class="l">${esc(x.game)}</td><td>${x.side}</td><td class="num">${Math.round(100 * x.price)}¢</td><td class="num">${P(x.p)}</td><td>${x.value ? "Value" : "Top pick"}</td><td>${mark(x.won)}</td><td class="num ${x.profit >= 0 ? "up" : "dn"}">${x.profit >= 0 ? "+" : "−"}$${Math.abs(x.profit).toFixed(2)}</td></tr>`).join("")}</tbody></table></div>` : "")
+    : `<p class="note">${esc(st.kalshi || "Not graded.")}</p>`);
+
+  // trend + backtest reference
+  const bt = RP.backtest || {};
+  $("#repTrend").innerHTML = `<h2>Week by week</h2><div class="tablewrap"><table><thead><tr><th class="l">Week</th><th>Winners</th><th>Vegas fav</th><th>Fantasy miss</th><th>Season-avg guess</th><th>Kalshi model Brier</th><th>Kalshi price Brier</th></tr></thead><tbody>${
+    RP.trend.map(t => `<tr><td class="l">${t.week}</td><td class="num">${P(t.acc)}</td><td class="num">${P(t.vegas)}</td><td class="num">${N(t.fmae, 2)}</td><td class="num">${N(t.fnaive, 2)}</td><td class="num">${N(t.kb, 4)}</td><td class="num">${N(t.kk, 4)}</td></tr>`).join("")}</tbody></table></div>
+    <p class="note">Before live grading, in backtests:${bt.games ? ` game picks ${P(bt.games.accuracy)} right over ${bt.games.period} (Vegas ${P(bt.games.vegas_accuracy)}), Brier ${N(bt.games.brier, 3)};` : ""}${bt.fantasy ? ` fantasy average miss ${N(bt.fantasy.mae_half, 2)} vs ${N(bt.fantasy.naive_mae, 2)} for season averages (${bt.fantasy.period});` : ""}${bt.kalshi ? ` player props ${bt.kalshi.bets} bets at ${Math.round(100 * bt.kalshi.roi)}% ROI (plausible range ${Math.round(100 * bt.kalshi.roi_lo)}% to +${Math.round(100 * bt.kalshi.roi_hi)}%).` : ""}</p>`;
+}
+
 // ---------------------------------------------------------------- tabs and boot
 const COPY = {
   intro: ["Gridiron", "NFL game predictions and fantasy football projections, rebuilt every morning from free play-by-play data. Here's what's on each tab, how to use it, and what's under the hood."],
   predictions: ["Gridiron Picks", "Machine-learning predictions for every remaining game. The model never sees the Vegas line, so the edge column shows where it disagrees with the market."],
   fantasy: ["Gridiron Fantasy", "Weekly fantasy projections for every fantasy-relevant player, built on the same data and game projections as the picks. Your leagues and teams are saved to your own account."],
+  report: ["Gridiron Report", "How the picks, fantasy projections and Kalshi bets did against what actually happened, graded every Tuesday morning after Monday Night Football."],
   betting: ["Gridiron Betting", "Kalshi's NFL prices next to our model's chances for game winners, spreads, totals and player props, with fees included and the model held back toward the market."]
 };
 function showTab(){
   const h = location.hash.slice(1);
-  const tab = h === "predictions" || h === "fantasy" || h === "betting" ? h : h === "intro" || h === "account" ? "intro" : store.get("gf_tab", "intro");
-  if (h === "predictions" || h === "fantasy" || h === "betting" || h === "intro") store.set("gf_tab", tab);
-  $("#introPanel").hidden = tab !== "intro"; $("#pred").hidden = tab !== "predictions"; $("#fant").hidden = tab !== "fantasy"; $("#bet").hidden = tab !== "betting";
+  const tab = h === "predictions" || h === "fantasy" || h === "betting" || h === "report" ? h : h === "intro" || h === "account" ? "intro" : store.get("gf_tab", "intro");
+  if (h === "predictions" || h === "fantasy" || h === "betting" || h === "report" || h === "intro") store.set("gf_tab", tab);
+  $("#introPanel").hidden = tab !== "intro"; $("#pred").hidden = tab !== "predictions"; $("#fant").hidden = tab !== "fantasy"; $("#bet").hidden = tab !== "betting"; $("#rep").hidden = tab !== "report";
   if (h === "account") setTimeout(() => document.getElementById("account").scrollIntoView(), 0); else window.scrollTo(0, 0);
   document.querySelectorAll("[data-tab]").forEach(a => { if (a.dataset.tab === tab) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   $("#title").textContent = COPY[tab][0]; $("#lede").textContent = COPY[tab][1];
   const er = E.run || {};
-  $("#eyebrow").textContent = tab === "betting" ? (B ? `Week ${B.games[0]?.week ?? NOW} · Kalshi prices from ${new Date(B.fetched_at.replace(/Z?$/, "Z")).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"})}` : "Kalshi") : tab === "intro" ? `${D.run.season} season · Week ${NOW}` : tab === "fantasy"
+  $("#eyebrow").textContent = tab === "report" ? (RP && RP.generated_at ? `${RP.season} season · Graded ${new Date(RP.generated_at.replace(/Z?$/, "Z")).toLocaleString([], {weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit"})}` : "Weekly accuracy report") : tab === "betting" ? (B ? `Week ${B.games[0]?.week ?? NOW} · Kalshi prices from ${new Date(B.fetched_at.replace(/Z?$/, "Z")).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"})}` : "Kalshi") : tab === "intro" ? `${D.run.season} season · Week ${NOW}` : tab === "fantasy"
     ? `${D.run.season} · Week ${wk}${(D.run.byes[wk] || []).length ? " · Byes: " + D.run.byes[wk].join(", ") : ""} · Updated ${D.run.built_at.replace("T"," ").replace("Z"," UTC")}`
     : `${D.run.season} · Weeks ${pweeks[0]}–${pweeks[pweeks.length-1]}${er.trained_through ? " · Model trained through " + er.trained_through : ""}`;
 }
@@ -1137,6 +1237,6 @@ if (a.mae){
   facts.push([String(D.players.length), "players, kickers and defenses projected"]);
   $("#introFacts").innerHTML = facts.map(([v,l]) => `<div class="fact"><span class="v">${v}</span><span class="label">${l}</span></div>`).join("");
 })();
-showTab(); renderPWeeks(); renderGames(); renderStand(); renderFantasy(); renderLinks();
+showTab(); renderReport(); renderPWeeks(); renderGames(); renderStand(); renderFantasy(); renderLinks();
 initUser();
 </script>

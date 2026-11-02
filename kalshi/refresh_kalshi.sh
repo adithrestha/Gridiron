@@ -21,3 +21,6 @@ python "$K/kalshi_edges.py" "$K/output/kalshi_markets.json" "$W/data" "$K/output
 python "$K/build_kalshi_page.py" "$K/output/kalshi_edges.json" "$K/output/kalshi.html"
 # Gridiron page's Betting tab: rebuild fantasy.html from the fantasy thread's current outputs (no model run)
 python /mnt/project-files/fantasy/build_fantasy_page.py
+
+# weekly accuracy report: keep the last pre-kickoff copy of these outputs (never fails the refresh)
+python3 /mnt/project-files/reports/snapshot.py kalshi || true

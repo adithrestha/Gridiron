@@ -52,7 +52,10 @@ mu = json.load(open(f"{OUT}/fantasy_matchups.json")) if os.path.exists(f"{OUT}/f
 # Betting tab: Kalshi prices vs the engine, built by /mnt/project-files/kalshi (read-only here)
 BET = "/mnt/project-files/kalshi/output/kalshi_tab_data.json"
 bet = json.load(open(BET)) if os.path.exists(BET) else None
-data = json.dumps({"run": run, "acc": acc, "players": players, "eng": eng, "meta": meta, "mu": mu, "hist": hist, "now": now, "bet": bet}, separators=(",", ":"))
+# Report tab: weekly accuracy report, built by /mnt/project-files/reports (read-only here)
+REP = "/mnt/project-files/reports/output/report.json"
+rep = json.load(open(REP)) if os.path.exists(REP) else None
+data = json.dumps({"run": run, "acc": acc, "players": players, "eng": eng, "meta": meta, "mu": mu, "hist": hist, "now": now, "bet": bet, "rep": rep}, separators=(",", ":"))
 
 html = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fantasy_template.html")).read()
 with open(f"{OUT}/fantasy.html", "w") as f:
