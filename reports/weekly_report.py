@@ -23,13 +23,13 @@ FMIN = 5.0  # fantasy players graded: projected at least this many half-PPR poin
 
 
 def get(url):
-    for i in range(5):
+    for i in range(7):
         try:
             return urllib.request.urlopen(url, timeout=90).read()
         except Exception:
-            if i == 4:
+            if i == 6:
                 raise
-            time.sleep(2 ** i)
+            time.sleep(2 ** (i + 1))
 
 
 def r(x, d=3):
@@ -149,14 +149,21 @@ def fantasy_rows(f):
 
 
 # ------------------------------------------------------------------ kalshi
+SETTLED = f"{R}/graded/kalshi_results.json"  # final results never change, so cache them (avoids Kalshi rate limits on re-runs)
+
+
 def settle(tickers):
-    res = {}
-    t = list(tickers)
+    cache = json.load(open(SETTLED)) if os.path.exists(SETTLED) else {}
+    res = {k: v for k, v in cache.items() if v in ("yes", "no", "scalar")}
+    t = [x for x in tickers if x not in res]
     for i in range(0, len(t), 100):
         d = json.loads(get(f"{KAPI}?limit=1000&tickers=" + ",".join(t[i:i + 100])))
         for m in d.get("markets", []):
             res[m["ticker"]] = m.get("result", "")
-        time.sleep(0.2)
+        time.sleep(0.5)
+    cache.update(res)
+    os.makedirs(os.path.dirname(SETTLED), exist_ok=True)
+    json.dump(cache, open(SETTLED, "w"))
     return res
 
 
